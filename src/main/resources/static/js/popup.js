@@ -89,7 +89,7 @@ class Popup {
         ['game finished', {
             title: 'Congratulations!',
             content: `<p>You've successfully completed the game!</p>
-                      <p>Thanks to you the spaceship Sojourner can continue its mission. </p>`,
+                      <p>Thanks to you, the spaceship Sojourner can continue its mission. </p>`,
             cta: 'Close'
         }],
         ['reset cut', {
