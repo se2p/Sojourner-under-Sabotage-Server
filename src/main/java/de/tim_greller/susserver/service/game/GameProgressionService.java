@@ -116,6 +116,8 @@ public class GameProgressionService {
      * @param componentFixedEvent the event
      */
     private void handleComponentFixed(ComponentFixedEvent componentFixedEvent) {
+        log.info("handle componentFixedEvent: {}", componentFixedEvent);
+
         var userProgress = userGameProgressionRepository.findById(currentUser()).orElseThrow();
         var progression = userProgress.getGameProgression();
 
@@ -133,7 +135,6 @@ public class GameProgressionService {
         if (newProgressionOpt.isEmpty()) {
             // TODO: handle game finished on max level reached
             eventService.publishEvent(new GameFinishedEvent());
-            System.out.println("Last progression reached - Game finished");
             return;
         }
         var newProgression = newProgressionOpt.get();
@@ -142,6 +143,7 @@ public class GameProgressionService {
         userProgress.setStatus(newProgression.getStage() == 1 ? DOOR : TESTS_ACTIVE);
         userGameProgressionRepository.save(userProgress);
         changeGameProgression(userProgress);
+        log.info("componentFixedEvent changed game progression to: {}", newProgression);
 
         // Set the component stage
         componentStatusService.getComponentStatus(newProgression.getComponent().getName(), currentUser().getUser().getUsername())

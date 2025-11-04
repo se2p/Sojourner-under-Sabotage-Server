@@ -72,7 +72,7 @@ public class TestService {
     public boolean updateTestForComponent(String componentName, String userId, String newSourceCode) {
         final TestEntity test = getOrCreateTestEntityForComponent(componentName, userId);
         if (!checkTestUsesTemplateParts(test.getClassName(), newSourceCode)) {
-            throw new SecurityException("Test has modified template parts.");
+            throw new SecurityException("Test has modified template parts.\n\nUser: " + userId + "\nSource:\n" + newSourceCode);
         }
         final boolean testChanged = !test.getSourceCode().equals(newSourceCode);
         if (testChanged) {

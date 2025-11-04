@@ -90,12 +90,14 @@ public class EventController {
         events.stream().sorted(Comparator.comparingLong(Event::getTimestamp))
                 .forEach(event -> {
                     if (event.getTimestamp() > sinceTimestamp) {
+                        log.info("Resending event {} for user {}", event.getClass().getSimpleName(), username);
                         simpMessagingTemplate.convertAndSendToUser(username, "/queue/events", event);
                     } else {
                         // client already received this event as it is older (or same) as the requested timestamp
                         events.remove(event);
                     }
                 });
+        log.info("Resent all events since {}", sinceTimestamp);
         return ResponseEntity.ok("Resent all events since " + sinceTimestamp);
     }
 }
