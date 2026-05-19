@@ -24,6 +24,7 @@ public class GameController {
     public String game(Model model) {
         var showSurvey = surveyService.isSurveyActive();
         model.addAttribute("showSurvey", showSurvey);
+        model.addAttribute("surveyName",  surveyService.getSurveyName());
         return "game";
     }
 }

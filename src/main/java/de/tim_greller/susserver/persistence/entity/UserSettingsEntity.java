@@ -22,4 +22,6 @@ public class UserSettingsEntity {
 
     @Builder.Default
     private boolean codeEditorIntroductionShown = false;
+
+    private String lastSurvey;
 }

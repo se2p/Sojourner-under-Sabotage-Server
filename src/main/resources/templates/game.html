@@ -25,7 +25,7 @@
     </div>
     <div id="survey" class="off-viewport-info">
       <nav class="hover-content">
-        <a th:href="@{/survey}" th:if="${showSurvey}" target="_blank" rel="noopener"><strong>Survey</strong></a>
+        <a th:href="@{/survey}" th:if="${showSurvey}" target="_blank" rel="noopener" id="open-survey"><strong th:text="${surveyName}"></strong></a>
         <a th:href="@{/reset}" id="reset-game-button">Reset</a>
         <a th:href="@{/logout}" id="logout-button">Logout</a>
       </nav>
