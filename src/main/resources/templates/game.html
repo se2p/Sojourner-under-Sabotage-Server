@@ -112,6 +112,7 @@
         /*[[${_csrf.headerName}]]*/ ''
         : /*[[${_csrf.token}]]*/ ''
       };
+      window.apiUrl = /*[[${@environment.getProperty('paths.api')}]]*/ '/api';
     </script>
     <script th:src="@{/js/ws.js}"></script>
     <script th:src="@{/js/popup.js}"></script>

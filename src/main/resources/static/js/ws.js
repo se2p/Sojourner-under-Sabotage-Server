@@ -42,7 +42,7 @@ class EventSystem {
       setTimeout(() => {
         if (this.lastReceivedEvent?.timestamp) {
           const lastTimestamp = eventSystemInstance.lastReceivedEvent.timestamp;
-          fetch(`/api/resend-events/${lastTimestamp}`, {headers: authHeader})
+          fetch(`${apiUrl}/resend-events/${lastTimestamp}`, {headers: authHeader})
               .then(r => r.text().then(console.log)).catch(console.error);
           console.log(`Requested resend of events since ${lastTimestamp}`);
         }
