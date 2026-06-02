@@ -29,7 +29,7 @@ class Settings {
         Settings.#check(key);
         if (this.#settings === null) await this.load();
         this.#settings[Settings.#keys[key]] = value;
-        return fetch("/api/settings", {
+        return fetch(`${apiUrl}/settings`, {
             method: "PUT",
             headers: jsonHeader,
             body: JSON.stringify(this.#settings)
@@ -38,7 +38,7 @@ class Settings {
 
     load() {
         return new Promise((resolve, reject) => {
-            fetch("/api/settings", {headers: jsonHeader})
+            fetch(`${apiUrl}/settings`, {headers: jsonHeader})
                 .then(response => response.json())
                 .then(data => {
                     this.#settings = data;
