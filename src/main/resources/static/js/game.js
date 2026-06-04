@@ -10,7 +10,7 @@ const minLineCoverage = 50; // % of lines that need to be covered to activate te
 /** @type {Map<string, ComponentData>} */
 const componentData = new Map();
 /** @type {{monaco:Record<string, ICodeEditor>, restricted:Record<string, constrainedEditor>}} */
-window.editors = {monaco:{}, restricted:{}};
+window.editors = {monaco: {}, restricted: {}};
 const monacoContainerDebug = document.getElementById('monaco-container-debug');
 window.editors.monaco.debug = monaco.editor.create(monacoContainerDebug, {
     value: '',
@@ -18,6 +18,7 @@ window.editors.monaco.debug = monaco.editor.create(monacoContainerDebug, {
     theme: 'vs-dark',
     automaticLayout: true,
     fontSize: 16,
+    glyphMargin: true,
 });
 
 const monacoContainerTest = document.getElementById('monaco-container-test');
@@ -27,13 +28,14 @@ window.editors.monaco.test = monaco.editor.create(monacoContainerTest, {
     theme: 'vs-dark',
     automaticLayout: true,
     fontSize: 16,
+    glyphMargin: true,
 });
 
 // top right buttons: add confirm dialogue to anchors
 document.getElementById('reset-game-button').addEventListener('click', ev => {
     ev.preventDefault();
     Popup.instance.open('reset').addButton(
-            'Reset',
+        'Reset',
         () => window.location.replace('/reset'),
         ['clr-error']
     );
@@ -50,8 +52,15 @@ document.getElementById('logout-button').addEventListener('click', ev => {
 const uiOverlay = document.getElementById('ui-overlay');
 
 const result = document.getElementById('execution-result');
+
 function renderResult(content) {
     result.innerHTML = content;
+    if (content) {
+        document.getElementById('bottom-panel').setAttribute('aria-hidden', 'false');
+        switchTab('results');
+        if (_lastCoverage) _applyCoverageDecorations();
+        setTimeout(() => result.scrollIntoView({behavior: 'smooth', block: 'nearest'}), 50);
+    }
     const editorContainers = document.querySelectorAll('.monaco-editor-container');
     editorContainers.forEach(el => el.style.height = '0');
     editors.monaco.test.layout();
@@ -157,10 +166,37 @@ function constrain(editableRanges, editorName = 'test') {
     })));
 }
 
+let _lastCoverage = null;
+let _debugRevealCoverage = false;
+
 function renderCoverage(coverage) {
-    const model = window.editors.monaco.debug.getModel();
+    _lastCoverage = coverage;
+    _applyCoverageDecorations();
+}
+
+function _revealedCoverage() {
     const cutClassId = window.cutClassName + '#' + window.userId;
-    const linesVisited = Object.entries(coverage?.[cutClassId] ?? {});
+    const full = _lastCoverage?.[cutClassId] ?? {};
+    const reached = new Set();
+    for (let i = 0; _debugSteps && i <= _debugStepIndex && i < _debugSteps.length; i++) {
+        const s = _debugSteps[i];
+        if (s._source !== 'test') reached.add(s.lineNumber); // only CUT lines carry coverage
+    }
+    const result = {};
+    for (const [line, count] of Object.entries(full)) {
+        if (reached.has(parseInt(line))) result[line] = count;
+    }
+    return {[cutClassId]: result};
+}
+
+function _applyCoverageDecorations() {
+    const model = window.editors.monaco.debug.getModel();
+    if (!model) return;
+    const cutClassId = window.cutClassName + '#' + window.userId;
+    const source = !_coverageHighlightOn ? null
+        : _debugRevealCoverage ? _revealedCoverage()
+            : _lastCoverage;
+    const linesVisited = Object.entries(source?.[cutClassId] ?? {});
     const decorations = linesVisited.map(cov => {
         const line = parseInt(cov[0]);
         return {
@@ -174,8 +210,8 @@ function renderCoverage(coverage) {
     });
 
     window.cutDecorations = model.deltaDecorations(
-      window.cutDecorations ?? [],
-      decorations
+        window.cutDecorations ?? [],
+        decorations
     );
 }
 
@@ -210,7 +246,7 @@ function renderDebugValues(variables) {
             const shortName = varName.split('/').pop();
             hints.push({
                 kind: monaco.languages.InlayHintKind.Type,
-                position: { column: Number.MAX_VALUE, lineNumber: parseInt(line) },
+                position: {column: Number.MAX_VALUE, lineNumber: parseInt(line)},
                 label: `${sep} ${shortName} = ${value}`,
                 paddingLeft: true,
                 tooltip: `The variable ${shortName} is assigned to the value "${value}" here.`,
@@ -222,7 +258,8 @@ function renderDebugValues(variables) {
     if (window.disposeHints) window.disposeHints.dispose();
     window.disposeHints = monaco.languages.registerInlayHintsProvider("java", {
         provideInlayHints(model, range, token) {
-            const dispose = () => {};
+            const dispose = () => {
+            };
             if (model === window.editors.monaco.debug.getModel()) {
                 return {hints, dispose};
             } else {
@@ -256,10 +293,301 @@ function renderLogs(logs) {
         decorations.push(decoration);
     }
     window.logDecorations = window.editors.monaco.debug.deltaDecorations(
-      window.logDecorations ?? [],
-      decorations
+        window.logDecorations ?? [],
+        decorations
     );
 }
+
+let _debugSteps = null;
+let _debugStepIndex = 0;
+
+const _breakpoints = {debug: new Set(), test: new Set()};
+const _bpDecorations = {debug: [], test: []};
+
+function _toggleBreakpoint(editorKey, lineNumber) {
+    const editor = window.editors.monaco[editorKey];
+    if (!editor) return;
+    const bp = _breakpoints[editorKey];
+    if (bp.has(lineNumber)) {
+        bp.delete(lineNumber);
+    } else {
+        bp.add(lineNumber);
+    }
+    _renderBreakpointDecorations(editorKey);
+}
+
+function _renderBreakpointDecorations(editorKey) {
+    const editor = window.editors.monaco[editorKey];
+    if (!editor) return;
+    const newDecos = [..._breakpoints[editorKey]].map(line => ({
+        range: new monaco.Range(line, 1, line, 1),
+        options: {
+            glyphMarginClassName: 'debug-breakpoint-glyph',
+            glyphMarginHoverMessage: {value: 'Breakpoint – click to remove'},
+            stickiness: monaco.editor.TrackedRangeStickiness.NeverGrowsWhenTypingAtEdges,
+        }
+    }));
+    _bpDecorations[editorKey] = editor.deltaDecorations(_bpDecorations[editorKey], newDecos);
+}
+
+function _attachBreakpointHandlers() {
+    const M = monaco.editor.MouseTargetType;
+    const gutterTypes = new Set([
+        M.GUTTER_GLYPH_MARGIN,
+        M.GUTTER_LINE_NUMBERS,
+        M.GUTTER_LINE_DECORATIONS,
+    ]);
+    ['debug', 'test'].forEach(key => {
+        const editor = window.editors.monaco[key];
+        if (!editor) return;
+        editor.onMouseDown(e => {
+            const t = e.target;
+            if (gutterTypes.has(t.type)) {
+                const line = t.position?.lineNumber;
+                if (line) _toggleBreakpoint(key, line);
+            }
+        });
+    });
+}
+
+_attachBreakpointHandlers();
+
+function renderDebugTrace(debugTrace) {
+    const cutClassId = window.cutClassName + '#' + window.userId;
+    const testClassId = window.testClassName + '#' + window.userId;
+
+    const cutSteps = (debugTrace?.[cutClassId] ?? []).map(s => ({...s, _source: 'cut'}));
+    const testSteps = (debugTrace?.[testClassId] ?? []).map(s => ({...s, _source: 'test'}));
+
+    // Merge both sorted by global index
+    const allSteps = [...cutSteps, ...testSteps].sort((a, b) => a.globalIndex - b.globalIndex);
+    _debugSteps = allSteps.length > 0 ? allSteps : null;
+    _debugStepIndex = 0;
+
+    if (!_debugSteps) {
+        _hideStepper();
+        return;
+    }
+
+    _debugRevealCoverage = true;
+    document.getElementById('bottom-panel').setAttribute('aria-hidden', 'false');
+    switchTab('debugger');
+    _renderCurrentStep();
+}
+
+function _splitTopLevel(s) {
+    const items = [];
+    let depth = 0, start = 0;
+    for (let i = 0; i < s.length; i++) {
+        const c = s[i];
+        if (c === '[' || c === '{' || c === '(') depth++;
+        else if (c === ']' || c === '}' || c === ')') depth--;
+        else if (c === ',' && depth === 0) {
+            items.push(s.slice(start, i).trim());
+            start = i + 1;
+        }
+    }
+    const last = s.slice(start).trim();
+    if (last.length > 0) items.push(last);
+    return items;
+}
+
+function _renderRow(name, v) {
+    const s = (v ?? '').trim();
+    const label = `<span class="var-name">${_e(String(name))}</span><span class="var-eq">=</span>`;
+
+    if (s.startsWith('[') && s.endsWith(']') && s.length > 2) {
+        const items = _splitTopLevel(s.slice(1, -1).trim());
+        if (items.length > 0) {
+            return `<details class="var-tree"><summary class="debug-var-row">` +
+                `<span class="var-tree-arrow"></span>${label}<code class="var-val">${_e(s)}</code></summary>` +
+                `<div class="var-tree-body">` +
+                items.map((item, i) => _renderRow(i, item)).join('') +
+                `</div></details>`;
+        }
+    }
+
+    if (s.startsWith('{') && s.endsWith('}') && s.length > 2) {
+        const pairs = _splitTopLevel(s.slice(1, -1).trim());
+        if (pairs.length > 0) {
+            return `<details class="var-tree"><summary class="debug-var-row">` +
+                `<span class="var-tree-arrow"></span>${label}<code class="var-val">${_e(s)}</code></summary>` +
+                `<div class="var-tree-body">` +
+                pairs.map(pair => {
+                    const eq = pair.indexOf('=');
+                    return eq === -1
+                        ? _renderRow('', pair)
+                        : _renderRow(pair.slice(0, eq).trim(), pair.slice(eq + 1).trim());
+                }).join('') +
+                `</div></details>`;
+        }
+    }
+
+    return `<div class="debug-var-row">` +
+        `<span class="var-tree-spacer"></span>${label}<code class="var-val">${_e(s)}</code></div>`;
+}
+
+function _renderCurrentStep() {
+    if (!_debugSteps) return;
+    const step = _debugSteps[_debugStepIndex];
+    const isCut = step._source !== 'test';
+    const badgeCls = isCut ? 'cut' : 'test';
+    const badgeText = isCut ? 'Class' : 'Test';
+
+    const labelEl = document.getElementById('debug-step-label');
+    labelEl.innerHTML =
+        `<span class="debug-source-badge ${badgeCls}">${_e(badgeText)}</span>` +
+        `Step ${_debugStepIndex + 1}&thinsp;/&thinsp;${_debugSteps.length}` +
+        `&ensp;&middot;&ensp;Line ${step.lineNumber}` +
+        `&ensp;&middot;&ensp;${_e(step.methodName)}`;
+
+    const atEnd = _debugStepIndex === _debugSteps.length - 1;
+    document.getElementById('debug-prev-btn').disabled = _debugStepIndex === 0;
+    document.getElementById('debug-next-btn').disabled = atEnd;
+
+    const continueBtn = document.getElementById('debug-continue-btn');
+    continueBtn.disabled = false;
+    continueBtn.classList.toggle('is-results', atEnd);
+    continueBtn.innerHTML = atEnd ? 'Results &#9654;' : '&#9654;&#9654; Continue';
+    continueBtn.title = atEnd ? 'Show test results' : 'Continue to next breakpoint [F8]';
+
+    const container = document.getElementById('debug-vars-body');
+    const entries = Object.entries(step.variables ?? {});
+    if (entries.length === 0) {
+        container.innerHTML = '<div class="no-vars">No variables in scope yet</div>';
+    } else {
+        container.innerHTML = entries.map(([k, v]) => _renderRow(k, v)).join('');
+    }
+
+    _highlightDebugLine(step.lineNumber, step._source);
+    if (_debugRevealCoverage) _applyCoverageDecorations();
+}
+
+function _enableDebugHighlight() {
+    if (!_debugHighlightOn) {
+        _debugHighlightOn = true;
+        document.getElementById('toggle-debug-btn').classList.add('is-on');
+    }
+}
+
+function debugStepPrev() {
+    if (_debugSteps && _debugStepIndex > 0) {
+        _enableDebugHighlight();
+        _debugStepIndex--;
+        _renderCurrentStep();
+    }
+}
+
+function debugStepNext() {
+    if (_debugSteps && _debugStepIndex < _debugSteps.length - 1) {
+        _enableDebugHighlight();
+        _debugStepIndex++;
+        _renderCurrentStep();
+    }
+}
+
+function debugContinue() {
+    if (!_debugSteps) return;
+    if (_debugStepIndex === _debugSteps.length - 1) {
+        switchTab('results');
+        return;
+    }
+    _enableDebugHighlight();
+    for (let i = _debugStepIndex + 1; i < _debugSteps.length; i++) {
+        const s = _debugSteps[i];
+        const editorKey = s._source === 'test' ? 'test' : 'debug';
+        if (_breakpoints[editorKey].has(s.lineNumber)) {
+            _debugStepIndex = i;
+            _renderCurrentStep();
+            return;
+        }
+    }
+    // No breakpoint
+    _debugStepIndex = _debugSteps.length - 1;
+    _renderCurrentStep();
+    switchTab('results');
+}
+
+const _currentLineDecors = {debug: [], test: []};
+
+function _highlightDebugLine(lineNumber, source) {
+    const effectiveLine = (_debugHighlightOn && lineNumber) ? lineNumber : null;
+    ['debug', 'test'].forEach(key => {
+        const editor = window.editors.monaco[key];
+        if (!editor) return;
+        const isActive = (key === 'test') === (source === 'test');
+        const decos = (isActive && effectiveLine) ? [{
+            range: new monaco.Range(lineNumber, 1, lineNumber, 1),
+            options: {
+                isWholeLine: true,
+                className: 'debug-current-line',
+                glyphMarginClassName: 'debug-current-line-glyph',
+            }
+        }] : [];
+        _currentLineDecors[key] = editor.deltaDecorations(_currentLineDecors[key], decos);
+    });
+    if (lineNumber) {
+        const activeKey = source === 'test' ? 'test' : 'debug';
+        window.editors.monaco[activeKey]?.revealLineInCenter(lineNumber);
+    }
+}
+
+function _hideStepper() {
+    _debugRevealCoverage = false;
+    _applyCoverageDecorations();
+    _highlightDebugLine(null);
+    document.getElementById('debug-prev-btn').disabled = true;
+    document.getElementById('debug-next-btn').disabled = true;
+    const continueBtn = document.getElementById('debug-continue-btn');
+    continueBtn.disabled = true;
+    continueBtn.classList.remove('is-results');
+    continueBtn.innerHTML = '&#9654;&#9654; Continue';
+    continueBtn.title = 'Continue to next breakpoint [F8]';
+    document.getElementById('debug-step-label').textContent = 'Run tests to see debug trace';
+    document.getElementById('debug-vars-body').innerHTML =
+        '<div class="no-vars">No trace available yet</div>';
+}
+
+document.addEventListener('keydown', ev => {
+    if (!_debugSteps) return;
+    if (ev.key === 'ArrowLeft') {
+        ev.preventDefault();
+        debugStepPrev();
+    }
+    if (ev.key === 'ArrowRight') {
+        ev.preventDefault();
+        debugStepNext();
+    }
+    if (ev.key === 'ArrowDown') {
+        ev.preventDefault();
+        debugContinue();
+    }
+});
+
+let _coverageHighlightOn = true;
+
+function toggleCoverageHighlight() {
+    _coverageHighlightOn = !_coverageHighlightOn;
+    document.getElementById('toggle-coverage-btn').classList.toggle('is-on', _coverageHighlightOn);
+    _applyCoverageDecorations();
+}
+
+let _debugHighlightOn = true;
+
+function toggleDebugHighlight() {
+    _debugHighlightOn = !_debugHighlightOn;
+    document.getElementById('toggle-debug-btn').classList.toggle('is-on', _debugHighlightOn);
+    if (_debugHighlightOn && _debugSteps) _renderCurrentStep();
+    else _highlightDebugLine(null);
+}
+
+function switchTab(name) {
+    ['debugger', 'results'].forEach(t => {
+        document.getElementById(`tab-btn-${t}`).classList.toggle('active', t === name);
+        document.getElementById(`tab-pane-${t}`).setAttribute('aria-hidden', t === name ? 'false' : 'true');
+    });
+}
+
 
 const [encodeHtmlEntities, decodeHtmlEntities] = (() => {
     const encoder = document.createElement('textarea');
@@ -276,8 +604,8 @@ const [_e, _d] = [encodeHtmlEntities, decodeHtmlEntities]; // shorthand
 /** @param {TestResult} obj */
 function renderTestResultObject(obj) {
     renderCoverage(obj.coverage);
-    // renderDebugValues(obj.variables); // not very useful without breakpoints
     renderLogs(obj.logs);
+    renderDebugTrace(obj.debugTrace);
 
     let r = `<strong>${obj.testClassName} </strong>`;
 
@@ -292,7 +620,7 @@ function renderTestResultObject(obj) {
         r += '<li>';
         r += `${details.className}::<strong>${fn} </strong>`;
         if (details.accessDenied != null) {
-            r +=`<span class="clr-error">Access Denied!<br>${details.accessDenied}</span><br>`;
+            r += `<span class="clr-error">Access Denied!<br>${details.accessDenied}</span><br>`;
         } else if (details.expectedTestResult != null || details.actualTestResult != null) {
             r += `
                 <div class="clr-success flex"><p>Expected value:</p> <pre>${_e(details.expectedTestResult)}</pre></div>
@@ -331,6 +659,7 @@ function renderTestResultObject(obj) {
 
 window.editors.monaco.test.onDidChangeModelContent(onContentChangedTests);
 window.editors.monaco.debug.onDidChangeModelContent(onContentChangedCut);
+
 function onContentChangedTests() {
     // hide variable value hints, as they can get confusing while editing
     if (window.disposeHints) window.disposeHints.dispose();
@@ -338,6 +667,7 @@ function onContentChangedTests() {
     // disable activate button, because the tests need to be executed again
     disableActivateButton();
 }
+
 function onContentChangedCut() {
     // hide variable value hints, as they can get confusing while editing
     if (window.disposeHints) window.disposeHints.dispose();
@@ -352,7 +682,9 @@ function closeEditor() {
     uiOverlay.setAttribute('aria-hidden', 'true');
     document.getElementById('unity-canvas').focus();
     window.unityInstance.SendMessage('BrowserInterface', 'OnEditorClose');
+    _hideStepper();
 }
+
 document.getElementById('editor-close-btn').addEventListener('click', closeEditor);
 
 const execBtn = document.getElementById('editor-execute-btn');
@@ -380,7 +712,7 @@ const execute = async () => {
             return;
         }
 
-        res.json().then(/** @param {TestResult} obj */ obj => {
+        res.json().then(/** @param {TestResult} obj */obj => {
             console.log(obj);
             execBtn.disabled = false;
 
@@ -429,11 +761,11 @@ const execute = async () => {
             }
         })
     })
-    .catch(e => {
-        console.error(e);
-        execBtn.disabled = false;
-        renderResult(`<p class="clr-error"><strong>Failed to execute test due to network issues.</strong></p>`);
-    });
+        .catch(e => {
+            console.error(e);
+            execBtn.disabled = false;
+            renderResult(`<p class="clr-error"><strong>Failed to execute test due to network issues.</strong></p>`);
+        });
 }
 execBtn.addEventListener('click', execute);
 
@@ -442,6 +774,7 @@ function updateResetButtonState(componentName) {
     resetCutButton.style.display = gameProgress?.status === 'DEBUGGING' ? 'block' : 'none';
     resetCutButton.disabled = gameProgress?.status !== 'DEBUGGING';
 }
+
 async function resetCut() {
     const componentName = currentComponent;
     if (!componentName) return;
@@ -466,6 +799,7 @@ async function resetCut() {
             });
     }, ['clr-error']);
 }
+
 document.getElementById('editor-reset-cut-btn').addEventListener('click', resetCut);
 
 /**
@@ -526,9 +860,9 @@ function updateActivateButtonState(data) {
 
     btn.disabled = !canActivate;
     btn.querySelector('.text').innerText =
-                    canActivate ? "Activate Test" :
-                    isActivated ? "Test Activated" :
-                    !testsPassed ? "tests need to pass to activate" :
+        canActivate ? "Activate Test" :
+            isActivated ? "Test Activated" :
+                !testsPassed ? "tests need to pass to activate" :
                     !enoughCoverage ? "get higher line coverage to activate" : "// unreachable";
     btn.querySelector('.activate-icon').classList.toggle('hidden', !canActivate && !isActivated);
     btn.querySelector('.coverage-icon').classList.toggle('hidden', enoughCoverage || !testsPassed);
@@ -559,6 +893,7 @@ async function activateTests() {
 
     Popup.instance.open('tests activated').onClose(closeEditor);
 }
+
 document.getElementById('editor-activate-test-btn').addEventListener('click', activateTests);
 
 
@@ -630,74 +965,74 @@ window.openEditor = async function (componentName) {
 window.es = new EventSystem();
 es.registerHandler('*', console.log);
 es.registerHandler(
-  'MutatedComponentTestsFailedEvent',
-  /** @param {{executionResult:TestResult, cutSource:SourceDTO, testSource:SourceDTO, componentName:string}} evt */
-  evt => {
-      window.unityInstance.SendMessage('BrowserInterface', 'OnMutatedComponentTestsFailed', evt.componentName);
-      /** @type {ComponentData} */
-      const data = {
-          testResult: evt.executionResult,
-          cut: evt.cutSource,
-          test: evt.testSource,
-      };
-      componentData.set(evt.componentName, data);
-  }
+    'MutatedComponentTestsFailedEvent',
+    /** @param {{executionResult:TestResult, cutSource:SourceDTO, testSource:SourceDTO, componentName:string}} evt */
+    evt => {
+        window.unityInstance.SendMessage('BrowserInterface', 'OnMutatedComponentTestsFailed', evt.componentName);
+        /** @type {ComponentData} */
+        const data = {
+            testResult: evt.executionResult,
+            cut: evt.cutSource,
+            test: evt.testSource,
+        };
+        componentData.set(evt.componentName, data);
+    }
 );
 es.registerHandler(
-  'ComponentDestroyedEvent',
-  /** @param {{executionResult:TestResult, cutSource:SourceDTO, componentName:string, autoGeneratedTestSource:SourceDTO}} evt */
-  evt => {
-      window.unityInstance.SendMessage('BrowserInterface', 'OnComponentDestroyed', evt.componentName);
-      const data = {
-          testResult: evt.executionResult,
-          cut: evt.cutSource,
-          test: evt.autoGeneratedTestSource,
-      };
-      componentData.set(evt.componentName, data);
-  }
+    'ComponentDestroyedEvent',
+    /** @param {{executionResult:TestResult, cutSource:SourceDTO, componentName:string, autoGeneratedTestSource:SourceDTO}} evt */
+    evt => {
+        window.unityInstance.SendMessage('BrowserInterface', 'OnComponentDestroyed', evt.componentName);
+        const data = {
+            testResult: evt.executionResult,
+            cut: evt.cutSource,
+            test: evt.autoGeneratedTestSource,
+        };
+        componentData.set(evt.componentName, data);
+    }
 );
 es.registerHandler(
-  'ComponentTestsExtendedEvent',
-  /** @param {{componentName:string, addedTestMethodName:string}} evt */
-  evt => {
-      fetch(`/api/components/${evt.componentName}/test/src`, {headers: authHeader})
-        .then(res => res.json())
-        .then(/** @param {SourceDTO} test */ async test => {
-            const data = await getComponentData(evt.componentName);
-            data.test = test;
-            componentData.set(evt.componentName, data);
-            console.log('Test for ' + evt.componentName + ' extended with ' + evt.addedTestMethodName);
-            // Is also fired when destroyed now, so only show the popup if it's happening during debugging
-            if (gameProgress.status === "DEBUGGING") {
-                Popup.instance.open('test extended', evt);
-            }
+    'ComponentTestsExtendedEvent',
+    /** @param {{componentName:string, addedTestMethodName:string}} evt */
+    evt => {
+        fetch(`/api/components/${evt.componentName}/test/src`, {headers: authHeader})
+            .then(res => res.json())
+            .then(/** @param {SourceDTO} test */ async test => {
+                const data = await getComponentData(evt.componentName);
+                data.test = test;
+                componentData.set(evt.componentName, data);
+                console.log('Test for ' + evt.componentName + ' extended with ' + evt.addedTestMethodName);
+                // Is also fired when destroyed now, so only show the popup if it's happening during debugging
+                if (gameProgress.status === "DEBUGGING") {
+                    Popup.instance.open('test extended', evt);
+                }
 
-            if (currentComponent === evt.componentName) {
-                window.editors.monaco.test.setValue(test.sourceCode);
-                constrain(test.editable, 'test');
-            }
-        });
-  }
+                if (currentComponent === evt.componentName) {
+                    window.editors.monaco.test.setValue(test.sourceCode);
+                    constrain(test.editable, 'test');
+                }
+            });
+    }
 );
 es.registerHandler(
-  GameProgressionChangedEvent.type,
-  /** @param {{progression:UserGameProgressionDTO}} evt */
-  evt => {
-      gameProgress = evt.progression;
-      window.unityInstance.SendMessage('BrowserInterface', 'OnGameProgressionChanged', JSON.stringify(evt.progression));
+    GameProgressionChangedEvent.type,
+    /** @param {{progression:UserGameProgressionDTO}} evt */
+    evt => {
+        gameProgress = evt.progression;
+        window.unityInstance.SendMessage('BrowserInterface', 'OnGameProgressionChanged', JSON.stringify(evt.progression));
 
-      console.log('Game progression changed: ', evt.progression);
-  }
+        console.log('Game progression changed: ', evt.progression);
+    }
 );
 es.registerHandler(
-  'ComponentFixedEvent',
-  /** @param {{componentName:string}} evt */
-  async evt => {
-      const data = await getComponentData(evt.componentName);
-      componentData.set(evt.componentName, data);
-      window.unityInstance.SendMessage('BrowserInterface', 'OnComponentFixed', evt.componentName);
-      Popup.instance.open('component fixed').onTransitionEnd(closeEditor);
-  }
+    'ComponentFixedEvent',
+    /** @param {{componentName:string}} evt */
+    async evt => {
+        const data = await getComponentData(evt.componentName);
+        componentData.set(evt.componentName, data);
+        window.unityInstance.SendMessage('BrowserInterface', 'OnComponentFixed', evt.componentName);
+        Popup.instance.open('component fixed').onTransitionEnd(closeEditor);
+    }
 );
 es.registerHandler(
     GameStartedEvent.type,

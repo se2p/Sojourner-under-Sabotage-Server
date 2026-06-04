@@ -56,6 +56,31 @@ public class ExecutionService {
     @Value("${jarsToInclude}") private List<String> jarsToInclude;
 
 
+    //temp
+    public TestExecutionResultDTO executeDebugRunner(String componentName, String userId, String runnerCode)
+            throws ClassLoadException, NotFoundException, TestExecutionException, CompilationException {
+        final var iTracker = InstrumentationTracker.getInstance();
+        iTracker.clearForUser(userId);
+        final var clientResultDto = new TestExecutionResultDTO();
+
+        var runnerSource = new TestSourceDTO(componentName, "DebugRunner", runnerCode, List.of());
+        final Class<?> testClass = compile(runnerSource, componentName, userId);
+        final var listener = new TestRunListener();
+        final TestExecutionResult r = run(testClass, listener);
+
+        clientResultDto.setTestClassName("DebugRunner");
+        clientResultDto.setTestStatus(r.getStatus());
+        clientResultDto.setTestDetails(listener.getMap());
+        clientResultDto.setElapsedTime(listener.getTestSuiteElapsedTime());
+        clientResultDto.setCoverage(iTracker.getCoverageForUser(userId));
+        clientResultDto.setVariables(iTracker.getVarsForUser(userId));
+        clientResultDto.setLogs(iTracker.getLogsForUser(userId));
+        clientResultDto.setDebugTrace(iTracker.getDebugTraceForUser(userId));
+        clientResultDto.setCoveredLines(mapMap(iTracker.getCoveredLinesForUser(userId), (k, v) -> v.size()));
+        clientResultDto.setTotalLines(mapMap(iTracker.getLinesForUser(userId), (k, v) -> v.size()));
+        return clientResultDto;
+    }
+
     public TestExecutionResultDTO execute(String componentName, String userId)
             throws ClassLoadException, NotFoundException, TestExecutionException, CompilationException {
         final var iTracker = InstrumentationTracker.getInstance();
@@ -99,6 +124,7 @@ public class ExecutionService {
         clientResultDto.setCoverage(iTracker.getCoverageForUser(userId));
         clientResultDto.setVariables(iTracker.getVarsForUser(userId));
         clientResultDto.setLogs(iTracker.getLogsForUser(userId));
+        clientResultDto.setDebugTrace(iTracker.getDebugTraceForUser(userId));
         clientResultDto.setCoveredLines(mapMap(iTracker.getCoveredLinesForUser(userId), (k, v) -> v.size()));
         clientResultDto.setTotalLines(mapMap(iTracker.getLinesForUser(userId), (k, v) -> v.size()));
         return clientResultDto;
@@ -183,6 +209,8 @@ public class ExecutionService {
             executionThread.join();
         } catch (InterruptedException e) {
             throw new TestExecutionException("Error while executing the test", e);
+        } finally {
+            timer.cancel();
         }
 
         if (timeOutTask.isThreadTimedOut()) {

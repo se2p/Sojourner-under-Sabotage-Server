@@ -29,7 +29,7 @@ public class TestInstrumentationAdapter extends ClassVisitor {
             final String[] pExceptions) {
         final MethodVisitor mv = super.visitMethod(pAccess, pMethodName, pDescriptor, pSignature, pExceptions);
 
-        return new MethodVisitor(ASM7, mv) {
+        return new VarTrackingMethodVisitor(ASM7, mv, testClassId, pMethodName) {
             @Override
             public void visitCode() {
                 // track method entered

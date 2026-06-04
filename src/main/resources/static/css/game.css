@@ -51,7 +51,7 @@
     display: flex;
     flex-direction: column;
     min-height: 100%;
-    max-height: 100%;
+    /*No max-height, temp?*/
     padding: 3rem;
     box-sizing: border-box;
 }
@@ -89,15 +89,211 @@
     border-color: #5865f2;
 }
 
-#execution-result {
+#bottom-panel {
     background: #1e1e1e; /* --vscode-editor-background */
     border: 2px solid transparent;
     border-radius: 0.5rem;
     padding: 1.5rem;
     margin-block: 1.5rem;
     color: #d4d4d4;
+}
+#bottom-panel[aria-hidden="true"] {
+    display: none;
+}
+.bottom-tab-bar {
+    display: flex;
+    border-bottom: 1px solid #3a3a3a;
+    padding: 0 0.75rem;
+}
+.bottom-tab-btn {
+    background: none;
+    border: none;
+    border-bottom: 2px solid transparent;
+    color: #888;
+    padding: 0.55rem 1rem;
+    font-size: 0.85rem;
+    font-family: inherit;
+    cursor: pointer;
+    margin-bottom: -1px;
+    transition: color 0.15s, border-color 0.15s;
+    user-select: none;
+}
+.bottom-tab-btn:hover { color: #ccc; }
+.bottom-tab-btn.active {
+    color: #9da5f2;
+    border-bottom-color: #5865f2;
+}
+.bottom-tab-bar-end {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0 0.5rem;
+}
+.bottom-toggle-btn {
+    background: none;
+    border: 1px solid #3a3a3a;
+    border-radius: 0.3rem;
+    color: #555;
+    padding: 0.2rem 0.6rem;
+    font-size: 0.75rem;
+    font-family: inherit;
+    cursor: pointer;
+    transition: color 0.15s, border-color 0.15s;
+    user-select: none;
+}
+.bottom-toggle-btn.is-on {
+    color: #9da5f2;
+    border-color: #5865f2;
+}
+.bottom-toggle-btn:hover {
+    color: #ccc;
+    border-color: #888;
+}
+.bottom-tab-pane {
+    padding: 1rem 1.5rem 1.25rem;
+}
+.bottom-tab-pane[aria-hidden="true"] {
+    display: none;
+}
 
-    max-height: 25vh;
+.debug-stepper-controls {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+.debug-btn {
+    font-size: 13px;
+    padding: 0.2rem 0.75rem;
+    min-width: 5rem;
+    --clr-bg: #3c4159;
+}
+.debug-btn:hover:not([disabled]), .debug-btn:focus:not([disabled]) {
+    --clr-bg: #5865f2;
+}
+.debug-btn[disabled] {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+.debug-step-label {
+    font-size: 0.85rem;
+    color: #aaa;
+    min-width: 22ch;
+    text-align: center;
+}
+.debug-stepper-body {
+    overflow-x: auto;
+}
+.debug-vars-list {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 0.82rem;
+    line-height: 1.65;
+    max-width: 50rem;
+}
+.no-vars {
+    color: #666;
+    font-style: italic;
+}
+
+.debug-var-row {
+    display: flex;
+    align-items: center;
+    white-space: nowrap;
+}
+.var-name { color: #9cdcfe; }
+.var-eq   { color: #777; padding: 0 0.35rem; }
+.var-val  { color: #ce9178; background: none; }
+
+.var-tree summary {
+    cursor: pointer;
+    list-style: none;
+    user-select: none;
+}
+.var-tree summary::-webkit-details-marker { display: none; }
+
+/* subtle disclosure triangle, drawn with borders */
+.var-tree-arrow {
+    display: inline-block;
+    width: 0;
+    height: 0;
+    border-style: solid;
+    border-width: 3px 0 3px 4px;
+    border-color: transparent transparent transparent #6a6a6a;
+    transition: transform 0.15s, border-left-color 0.15s;
+    flex-shrink: 0;
+}
+.var-tree summary:hover .var-tree-arrow {
+    border-left-color: #aaa;
+}
+.var-tree[open] > summary .var-tree-arrow {
+    transform: rotate(90deg);
+}
+.var-tree-spacer {
+    display: inline-block;
+    width: 4.5px;
+    flex-shrink: 0;
+}
+.var-tree-arrow, .var-tree-spacer {
+    margin-right: 0.4rem;
+}
+.var-tree-body {
+    padding-left: 0.55rem;
+    margin-left: 0.15rem;
+    border-left: 1px solid #333;
+}
+
+.debug-current-line {
+    background: rgba(220, 40, 40, 0.45) !important;
+}
+.debug-current-line-glyph::before {
+    content: "▶";
+    color: #ff4d4d;
+    font-size: 0.75rem;
+    line-height: 1.8;
+}
+
+.debug-breakpoint-glyph::before {
+    content: "⬤";
+    color: #e53e3e;
+    font-size: 0.7rem;
+    line-height: 1.85;
+    cursor: pointer;
+}
+
+.debug-continue-btn {
+    --clr-bg: #2d3561;
+    margin-left: 0.5rem;
+}
+.debug-continue-btn:hover:not([disabled]), .debug-continue-btn:focus:not([disabled]) {
+    --clr-bg: #5865f2;
+}
+.debug-continue-btn.is-results {
+    --clr-bg: #1e5631;
+}
+.debug-continue-btn.is-results:hover:not([disabled]), .debug-continue-btn.is-results:focus:not([disabled]) {
+    --clr-bg: #2e9e54;
+}
+
+.debug-source-badge {
+    display: inline-block;
+    font-size: 0.75rem;
+    padding: 0.05rem 0.4rem;
+    border-radius: 3px;
+    margin-right: 0.35rem;
+    font-weight: 600;
+    vertical-align: middle;
+}
+.debug-source-badge.cut {
+    background: #1e3a5f;
+    color: #7ab7ff;
+}
+.debug-source-badge.test {
+    background: #1e3d2b;
+    color: #6ee7a0;
+}
+#execution-result {
+    color: #d4d4d4;
+    max-height: 30vh;
     overflow: auto;
 }
 #execution-result:empty {
@@ -276,6 +472,82 @@
     width: 100% !important;
     height: 100% !important;
     margin-block-end: -8px; /* for some reason the canvas is a few pixels too large */
+}
+
+#debug-page {
+    background: #272727;
+    min-height: 100vh;
+    color: #d4d4d4;
+}
+
+.debug-page-layout {
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+    padding: 2rem 3rem;
+    box-sizing: border-box;
+}
+
+.debug-page-layout #button-bar {
+    flex-shrink: 0;
+}
+
+#component-select {
+    font-family: var(--base-fonts, sans-serif);
+    font-size: 14px;
+    background: #1e1e1e;
+    color: #d4d4d4;
+    border: 1px solid #555;
+    border-radius: .4rem;
+    padding: .35rem .6rem;
+    cursor: pointer;
+    min-width: 12rem;
+    transition: border-color .2s;
+}
+#component-select:focus {
+    outline: none;
+    border-color: #5865f2;
+}
+
+.debug-editors {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+    min-height: 400px;
+}
+@media screen and (min-width: 768px) {
+    .debug-editors { flex-direction: row; }
+}
+
+.debug-editor-panel {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+    min-height: 0;
+}
+
+@media screen and (min-width: 768px) {
+    .debug-editor-panel--runner {
+        flex: 0 1 38%;
+        max-width: 38%;
+    }
+}
+
+.debug-editor-panel > .monaco-editor-container {
+    flex: 1;
+    max-width: 100% !important;
+    min-height: 0;
+}
+
+.debug-editor-label {
+    color: #555;
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    font-family: var(--base-fonts, sans-serif);
+    user-select: none;
 }
 
 #alarm {

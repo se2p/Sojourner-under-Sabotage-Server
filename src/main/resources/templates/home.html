@@ -25,8 +25,17 @@
         </div>
         <h1>Sojourner under<br><span class="orange">Sabotage</span></h1>
         <img th:src="@{/images/sus-teaser.png}" alt="Sojourner under Sabotage" draggable="false" />
-        <a th:href="@{/reset}" class="button">New game</a>
-        <a th:href="@{/game}" class="btn-small">Continue</a>
+        <div class="strand-cards">
+            <div class="strand-card">
+                <h2 class="strand-name">Testing</h2>
+                <a th:href="@{/reset}" class="button">New game</a>
+                <a th:href="@{/game}" class="btn-small">Continue</a>
+            </div>
+            <div class="strand-card">
+                <h2 class="strand-name">Debugging</h2>
+                <a th:href="@{/debug}" class="button">Open editor</a>
+            </div>
+        </div>
     </div>
     <div class="intro">
         <h2><span class="orange">You were never meant to be awake.</span></h2>

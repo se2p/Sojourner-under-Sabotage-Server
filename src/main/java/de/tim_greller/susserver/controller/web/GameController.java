@@ -1,5 +1,6 @@
 package de.tim_greller.susserver.controller.web;
 
+import de.tim_greller.susserver.persistence.repository.ComponentRepository;
 import de.tim_greller.susserver.service.game.GameProgressionService;
 import de.tim_greller.susserver.service.tracking.SurveyService;
 import lombok.RequiredArgsConstructor;
@@ -13,6 +14,7 @@ public class GameController {
 
     private final GameProgressionService gameProgressionService;
     private final SurveyService surveyService;
+    private final ComponentRepository componentRepository;
 
     @GetMapping("/reset")
     public String newGame() {
@@ -25,5 +27,16 @@ public class GameController {
         var showSurvey = surveyService.isSurveyActive();
         model.addAttribute("showSurvey", showSurvey);
         return "game";
+    }
+    //todo remove/rework used for testing
+    @GetMapping("/debug")
+    public String debugEditor(Model model) {
+        var components = componentRepository.findAll()
+                .stream()
+                .map(c -> c.getName())
+                .sorted()
+                .toList();
+        model.addAttribute("components", components);
+        return "debug";
     }
 }

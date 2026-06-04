@@ -1,16 +1,22 @@
 package de.tim_greller.susserver.model.execution.instrumentation;
 
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.TreeMap;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static de.tim_greller.susserver.util.Utils.filterMap;
 import static de.tim_greller.susserver.util.Utils.mapMap;
 
+import de.tim_greller.susserver.dto.DebugStep;
 import de.tim_greller.susserver.dto.LogEntry;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
@@ -24,6 +30,7 @@ public class InstrumentationTracker {
 
     private static final InstrumentationTracker INSTANCE = new InstrumentationTracker();
     private static final Map<String, ClassTracker> classTrackers = new TreeMap<>();
+    private static final Map<String, AtomicInteger> userStepCounters = new ConcurrentHashMap<>();
 
     private InstrumentationTracker() {
     }
@@ -78,7 +85,7 @@ public class InstrumentationTracker {
             classTracker.trackVariableValueChanged(value, pVarIndex, methodName);
             classTrackers.put(pClassName, classTracker);
         }
-        log.debug("{} {}", pVarIndex, pClassName);
+        log.debug("[trackVar] idx={} class={} method={} value={}", pVarIndex, pClassName, methodName, value);
     }
     @SuppressWarnings("unused")
     public static void trackVar(final int value, final int pVarIndex, final String pClassName, final String methodName) {
@@ -97,6 +104,32 @@ public class InstrumentationTracker {
         trackVar((Double) value, pVarIndex, pClassName, methodName);
     }
 
+    @SuppressWarnings("unused")
+    public static void trackField(final int value, final String fieldName, final String pClassName, final String methodName) {
+        classTrackers.computeIfAbsent(pClassName, k -> new ClassTracker()).trackFieldValueChanged(value, fieldName);
+    }
+    @SuppressWarnings("unused")
+    public static void trackField(final long value, final String fieldName, final String pClassName, final String methodName) {
+        classTrackers.computeIfAbsent(pClassName, k -> new ClassTracker()).trackFieldValueChanged(value, fieldName);
+    }
+    @SuppressWarnings("unused")
+    public static void trackField(final float value, final String fieldName, final String pClassName, final String methodName) {
+        classTrackers.computeIfAbsent(pClassName, k -> new ClassTracker()).trackFieldValueChanged(value, fieldName);
+    }
+    @SuppressWarnings("unused")
+    public static void trackField(final double value, final String fieldName, final String pClassName, final String methodName) {
+        classTrackers.computeIfAbsent(pClassName, k -> new ClassTracker()).trackFieldValueChanged(value, fieldName);
+    }
+    @SuppressWarnings("unused")
+    public static void trackField(final Object value, final String fieldName, final String pClassName, final String methodName) {
+        classTrackers.computeIfAbsent(pClassName, k -> new ClassTracker()).trackFieldValueChanged(value, fieldName);
+    }
+
+    @SuppressWarnings("unused")
+    public static void trackFieldBool(final int value, final String fieldName, final String pClassName, final String methodName) {
+        classTrackers.computeIfAbsent(pClassName, k -> new ClassTracker()).trackFieldValueChanged(value != 0 ? "true" : "false", fieldName);
+    }
+
     public static void trackVarDef(final int pVarIndex, final String pVarName, final String pVarDesc,
                                    final String pClassName, final String methodName) {
         if (classTrackers.containsKey(pClassName)) {
@@ -106,12 +139,22 @@ public class InstrumentationTracker {
             classTracker.trackVariableDefinition(pVarIndex, methodName + "/" + pVarName, pVarDesc, methodName);
             classTrackers.put(pClassName, classTracker);
         }
-        log.debug("{} {} {} {}::{}", pVarIndex, pVarName, pVarDesc, pClassName, methodName);
+        log.debug("[trackVarDef] idx={} name={} desc={} class={} method={}", pVarIndex, pVarName, pVarDesc, pClassName, methodName);
     }
 
     public static void trackLog(String message, String pClassName, String methodName) {
         classTrackers.computeIfAbsent(pClassName, k -> new ClassTracker())
             .trackLog(message, methodName);
+    }
+
+    @SuppressWarnings("unused")
+    public static void trackDebugStep(final int pLineNumber, final String pClassName, final String methodName) {
+        final String userId = pClassName.contains("#")
+                ? pClassName.substring(pClassName.lastIndexOf('#') + 1)
+                : "";
+        final int globalIdx = userStepCounters.computeIfAbsent(userId, k -> new AtomicInteger()).getAndIncrement();
+        classTrackers.computeIfAbsent(pClassName, k -> new ClassTracker())
+                .captureDebugStep(pLineNumber, methodName, globalIdx);
     }
 
     @SuppressWarnings("unused")
@@ -164,22 +207,34 @@ public class InstrumentationTracker {
         return filterMap(getLogs(), (className, lines) -> className.endsWith("#" + userId));
     }
 
+    public Map<String, List<DebugStep>> getDebugTrace() {
+        return mapMap(classTrackers, (className, classTracker) -> classTracker.getDebugTrace());
+    }
+
+    public Map<String, List<DebugStep>> getDebugTraceForUser(String userId) {
+        return filterMap(getDebugTrace(), (className, trace) -> className.endsWith("#" + userId));
+    }
+
     public void clearForUser(String userId) {
         classTrackers.entrySet().stream()
                 .filter(entry -> entry.getKey().endsWith("#" + userId))
                 .forEach(entry -> entry.getValue().clear());
+        userStepCounters.computeIfAbsent(userId, k -> new AtomicInteger()).set(0);
     }
 
     @Getter
     public static class ClassTracker {
         private int lastVisitedLine = 0;
         private int logIndex = 0;
+        private int stepIndex = 0;
         private String currentTestMethod = null;
         private final Map<Integer, Integer> visitedLines = new TreeMap<>();
         private final Set<Integer> lines = new HashSet<>();
         private final Map<String, String[]> currentIndexToVarNameAndDescriptor = new TreeMap<>();
         private final Map<Integer, Map<String, Object>> vars = new TreeMap<>();
         private final List<LogEntry> logs = new LinkedList<>();
+        private final Map<String, Object> liveVarState = new LinkedHashMap<>();
+        private final List<DebugStep> debugTrace = new ArrayList<>();
 
         void visitLine(final int pLineNumber) {
             if (visitedLines.containsKey(pLineNumber)) {
@@ -201,6 +256,7 @@ public class InstrumentationTracker {
                 return;
             }
             String varName = currentIndexToVarNameAndDescriptor.get(varId)[0];
+            log.debug("[trackVar] FOUND varId={} varName={} value={}", varId, varName, value);
             if (vars.containsKey(lastVisitedLine)) {
                 vars.get(lastVisitedLine).put(varName, value);
             } else {
@@ -208,6 +264,40 @@ public class InstrumentationTracker {
                 varMap.put(varName, value);
                 vars.put(lastVisitedLine, varMap);
             }
+            liveVarState.put(varName, value);
+        }
+
+        void captureDebugStep(final int lineNumber, final String methodName, final int globalIndex) {
+            Map<String, String> snapshot = new LinkedHashMap<>();
+            liveVarState.forEach((qualifiedName, value) -> {
+                String shortName = qualifiedName.contains("/")
+                        ? qualifiedName.substring(qualifiedName.lastIndexOf('/') + 1)
+                        : qualifiedName;
+                snapshot.put(shortName, formatValue(value));
+            });
+            log.debug("[captureDebugStep] line={} method={} liveVars={} snapshot={}", lineNumber, methodName, liveVarState.size(), snapshot);
+            debugTrace.add(new DebugStep(globalIndex, stepIndex++, lineNumber, methodName, currentTestMethod, snapshot));
+        }
+
+        private static String formatValue(Object value) {
+            if (value == null) return "null";
+            return switch (value.getClass().getName()) {
+                case "[I" -> Arrays.toString((int[])     value);
+                case "[J" -> Arrays.toString((long[])    value);
+                case "[D" -> Arrays.toString((double[])  value);
+                case "[F" -> Arrays.toString((float[])   value);
+                case "[Z" -> Arrays.toString((boolean[]) value);
+                case "[B" -> Arrays.toString((byte[])    value);
+                case "[S" -> Arrays.toString((short[])   value);
+                case "[C" -> Arrays.toString((char[])    value);
+                default   -> value.getClass().isArray()
+                             ? Arrays.deepToString((Object[]) value)
+                             : Objects.toString(value);
+            };
+        }
+
+        void trackFieldValueChanged(final Object value, final String fieldName) {
+            liveVarState.put(fieldName, value);
         }
 
         void trackVariableDefinition(final int pVarIndex, final String pVarName, String pVarDesc, final String methodName) {
@@ -229,9 +319,11 @@ public class InstrumentationTracker {
             currentIndexToVarNameAndDescriptor.clear();
             vars.clear();
             logs.clear();
-
+            liveVarState.clear();
+            debugTrace.clear();
             lastVisitedLine = 0;
             logIndex = 0;
+            stepIndex = 0;
             currentTestMethod = null;
         }
     }

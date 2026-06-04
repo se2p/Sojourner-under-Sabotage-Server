@@ -11,6 +11,7 @@ import java.util.stream.Stream;
 import static java.nio.charset.StandardCharsets.UTF_8;
 
 import de.tim_greller.susserver.persistence.entity.CutEntity;
+import de.tim_greller.susserver.persistence.entity.DebugMainEntity;
 import de.tim_greller.susserver.persistence.entity.FallbackTestEntity;
 import de.tim_greller.susserver.persistence.entity.GameProgressionEntity;
 import de.tim_greller.susserver.persistence.entity.PatchEntity;
@@ -18,6 +19,7 @@ import de.tim_greller.susserver.persistence.keys.ComponentKey;
 import de.tim_greller.susserver.persistence.keys.ComponentStageKey;
 import de.tim_greller.susserver.persistence.repository.ComponentRepository;
 import de.tim_greller.susserver.persistence.repository.CutRepository;
+import de.tim_greller.susserver.persistence.repository.DebugMainRepository;
 import de.tim_greller.susserver.persistence.repository.FallbackTestRepository;
 import de.tim_greller.susserver.persistence.repository.GameProgressionRepository;
 import de.tim_greller.susserver.persistence.repository.PatchRepository;
@@ -44,6 +46,7 @@ public class InsertInitialData implements CommandLineRunner {
     private final CutRepository cutRepository;
     private final PatchRepository patchRepository;
     private final FallbackTestRepository fallbackTestRepository;
+    private final DebugMainRepository debugMainRepository;
     private final GameProgressionRepository gameProgressionRepository;
     private final PatchService patchService;
     private final ResourceLoader resourceLoader;
@@ -63,14 +66,36 @@ public class InsertInitialData implements CommandLineRunner {
     @Value("${gameProgressionCSV:classpath:game/game-progression.csv}")
     private String gameProgressionCSV;
 
+    @Value("${debugCutPattern:classpath:debug-cut/*.java}")
+    private String debugCutPattern;
+
+    @Value("${debugTestPattern:classpath:debug-test/stage-*/*.java}")
+    private String debugTestPattern;
+
+    @Value("${debugMainPattern:classpath:debug-main/stage-*/*.java}")
+    private String debugMainPattern;
+
+    @Value("${debugMutantPattern:classpath:debug-mutants/stage-*/*.java}")
+    private String debugMutantPattern;
+
+    @Value("${debugProgressionCSV:classpath:game/debug-progression.csv}")
+    private String debugProgressionCSV;
+
 
     @Override
     public void run(String... args) throws Exception {
         if (initData) {
             readAndSaveCuts();
             readAndSaveFallbackTests();
-            readAndSaveGameProgression();
+            readAndSaveGameProgression(gameProgressionCSV);
+
+            readAndSaveDebugCuts();
+            readAndSaveDebugTests();
+            readAndSaveDebugMains();
+            readAndSaveGameProgression(debugProgressionCSV);
+
             readAndSavePatches();
+            readAndSaveDebugPatches();
         }
     }
 
@@ -111,13 +136,58 @@ public class InsertInitialData implements CommandLineRunner {
      * Requires {@link InsertInitialData#readAndSaveCuts()} to be called first, so all CUTs are available.
      */
     private void readAndSavePatches() throws IOException {
+        readPatchesFromPattern(mutantPattern);
+    }
+
+    private void readAndSaveDebugCuts() throws IOException {
         ResourcePatternResolver resolver = ResourcePatternUtils.getResourcePatternResolver(resourceLoader);
-        for (Resource resource : resolver.getResources(mutantPattern)) {
+        for (Resource resource : resolver.getResources(debugCutPattern)) {
+            var name = getComponentName(resource);
+            var content = resource.getContentAsString(UTF_8);
+            var className = extractClassName(content);
+            assert !className.isEmpty();
+            var component = componentRepository.getOrCreate(name);
+            cutRepository.save(new CutEntity(new ComponentKey(component), className, content));
+        }
+    }
+
+    //todo: refactor
+    private void readAndSaveDebugTests() throws IOException {
+        ResourcePatternResolver resolver = ResourcePatternUtils.getResourcePatternResolver(resourceLoader);
+        for (Resource resource : resolver.getResources(debugTestPattern)) {
+            var stage = getStageNumber(resource);
+            var name = Objects.requireNonNull(resource.getFilename()).split("Test\\.java")[0];
+            var content = resource.getContentAsString(UTF_8);
+            var className = extractClassName(content);
+            assert !className.isEmpty();
+            var componentKey = new ComponentStageKey(componentRepository.getOrCreate(name), stage);
+            fallbackTestRepository.save(new FallbackTestEntity(componentKey, className, content));
+        }
+    }
+
+    private void readAndSaveDebugMains() throws IOException {
+        ResourcePatternResolver resolver = ResourcePatternUtils.getResourcePatternResolver(resourceLoader);
+        for (Resource resource : resolver.getResources(debugMainPattern)) {
+            var stage = getStageNumber(resource);
+            var name = getComponentName(resource);
+            var content = resource.getContentAsString(UTF_8);
+            var componentKey = new ComponentStageKey(componentRepository.getOrCreate(name), stage);
+            debugMainRepository.save(new DebugMainEntity(componentKey, name, content));
+        }
+    }
+
+    private void readAndSaveDebugPatches() throws IOException {
+        readPatchesFromPattern(debugMutantPattern);
+    }
+
+    private void readPatchesFromPattern(String pattern) throws IOException {
+        ResourcePatternResolver resolver = ResourcePatternUtils.getResourcePatternResolver(resourceLoader);
+        for (Resource resource : resolver.getResources(pattern)) {
             var mutatedSourceCode = resource.getContentAsString(UTF_8);
             var component = componentRepository.getOrCreate(getComponentName(resource));
             var cut = cutRepository.findById(new ComponentKey(component)).orElseThrow();
             var patch = patchService.createPatch(cut.getSourceCode(), mutatedSourceCode);
-            var mutant = new PatchEntity(patch, new ComponentStageKey(component,  getStageNumber(resource)));
+            var mutant = new PatchEntity(patch, new ComponentStageKey(component, getStageNumber(resource)));
             patchRepository.save(mutant);
         }
     }
@@ -143,9 +213,9 @@ public class InsertInitialData implements CommandLineRunner {
                 .findAny().orElseThrow();
     }
 
-    private void readAndSaveGameProgression() throws IOException {
+    private void readAndSaveGameProgression(String csvPath) throws IOException {
         ResourcePatternResolver resolver = ResourcePatternUtils.getResourcePatternResolver(resourceLoader);
-        Resource resource = resolver.getResource(gameProgressionCSV);
+        Resource resource = resolver.getResource(csvPath);
 
         try (Stream<String> lines = new BufferedReader(new InputStreamReader(resource.getInputStream(), UTF_8)).lines()) {
             lines.skip(1) // Skip the header line

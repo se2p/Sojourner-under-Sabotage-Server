@@ -81,7 +81,32 @@
           <div class="monaco-editor-container" id="monaco-container-debug"></div>
           <div class="monaco-editor-container" id="monaco-container-test"></div>
         </div>
-        <div id="execution-result"></div>
+        <div id="bottom-panel" aria-hidden="true">
+          <div class="bottom-tab-bar">
+            <button class="bottom-tab-btn" id="tab-btn-results" onclick="switchTab('results')">Test Results</button>
+            <button class="bottom-tab-btn" id="tab-btn-debugger" onclick="switchTab('debugger')">Debugger</button>
+            <div class="bottom-tab-bar-end">
+              <button id="toggle-coverage-btn" class="bottom-toggle-btn is-on" onclick="toggleCoverageHighlight()" title="Toggle coverage highlighting">Coverage</button>
+              <button id="toggle-debug-btn" class="bottom-toggle-btn is-on" onclick="toggleDebugHighlight()" title="Toggle debug line highlighting">Debug line</button>
+            </div>
+          </div>
+          <div id="tab-pane-debugger" class="bottom-tab-pane">
+            <div class="debug-stepper-controls">
+              <button class="button debug-btn" id="debug-prev-btn" title="Previous step [←]" onclick="debugStepPrev()" disabled>&#9664; Prev</button>
+              <span id="debug-step-label" class="debug-step-label"></span>
+              <button class="button debug-btn" id="debug-next-btn" title="Next step [→]" onclick="debugStepNext()" disabled>Next &#9654;</button>
+              <button class="button debug-btn debug-continue-btn" id="debug-continue-btn" title="Continue to next breakpoint [F8]" onclick="debugContinue()" disabled>&#9654;&#9654; Continue</button>
+            </div>
+            <div class="debug-stepper-body">
+              <div class="debug-vars-panel">
+                <div class="debug-vars-list" id="debug-vars-body"></div>
+              </div>
+            </div>
+          </div>
+          <div id="tab-pane-results" class="bottom-tab-pane" aria-hidden="true">
+            <div id="execution-result"></div>
+          </div>
+        </div>
       </div>
     </div>
     <div id="unity-container">
