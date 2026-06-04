@@ -127,7 +127,7 @@ public class InstrumentationTracker {
 
     @SuppressWarnings("unused")
     public static void trackFieldBool(final int value, final String fieldName, final String pClassName, final String methodName) {
-        classTrackers.computeIfAbsent(pClassName, k -> new ClassTracker()).trackFieldValueChanged(value != 0 ? "true" : "false", fieldName);
+        classTrackers.computeIfAbsent(pClassName, k -> new ClassTracker()).trackFieldValueChanged(Boolean.toString(value != 0), fieldName);
     }
 
     public static void trackVarDef(final int pVarIndex, final String pVarName, final String pVarDesc,

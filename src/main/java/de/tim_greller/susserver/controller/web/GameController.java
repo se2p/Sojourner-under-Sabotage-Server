@@ -1,5 +1,6 @@
 package de.tim_greller.susserver.controller.web;
 
+import de.tim_greller.susserver.persistence.entity.ComponentEntity;
 import de.tim_greller.susserver.persistence.repository.ComponentRepository;
 import de.tim_greller.susserver.service.game.GameProgressionService;
 import de.tim_greller.susserver.service.tracking.SurveyService;
@@ -33,7 +34,7 @@ public class GameController {
     public String debugEditor(Model model) {
         var components = componentRepository.findAll()
                 .stream()
-                .map(c -> c.getName())
+                .map(ComponentEntity::getName)
                 .sorted()
                 .toList();
         model.addAttribute("components", components);
