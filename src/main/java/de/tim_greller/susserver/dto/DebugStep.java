@@ -8,6 +8,6 @@ public record DebugStep(
         int lineNumber,
         String methodName,
         String testMethodName,
-        Map<String, String> variables
+        Map<String, DebugValue> variables
 ) {
 }

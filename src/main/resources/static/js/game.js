@@ -375,56 +375,21 @@ function renderDebugTrace(debugTrace) {
     _renderCurrentStep();
 }
 
-function _splitTopLevel(s) {
-    const items = [];
-    let depth = 0, start = 0;
-    for (let i = 0; i < s.length; i++) {
-        const c = s[i];
-        if (c === '[' || c === '{' || c === '(') depth++;
-        else if (c === ']' || c === '}' || c === ')') depth--;
-        else if (c === ',' && depth === 0) {
-            items.push(s.slice(start, i).trim());
-            start = i + 1;
-        }
-    }
-    const last = s.slice(start).trim();
-    if (last.length > 0) items.push(last);
-    return items;
-}
-
-function _renderRow(name, v) {
-    const s = (v ?? '').trim();
+function _renderRow(name, node) {
     const label = `<span class="var-name">${_e(String(name))}</span><span class="var-eq">=</span>`;
+    const preview = node?.preview ?? '';
+    const children = node?.children;
 
-    if (s.startsWith('[') && s.endsWith(']') && s.length > 2) {
-        const items = _splitTopLevel(s.slice(1, -1).trim());
-        if (items.length > 0) {
-            return `<details class="var-tree"><summary class="debug-var-row">` +
-                `<span class="var-tree-arrow"></span>${label}<code class="var-val">${_e(s)}</code></summary>` +
-                `<div class="var-tree-body">` +
-                items.map((item, i) => _renderRow(i, item)).join('') +
-                `</div></details>`;
-        }
-    }
-
-    if (s.startsWith('{') && s.endsWith('}') && s.length > 2) {
-        const pairs = _splitTopLevel(s.slice(1, -1).trim());
-        if (pairs.length > 0) {
-            return `<details class="var-tree"><summary class="debug-var-row">` +
-                `<span class="var-tree-arrow"></span>${label}<code class="var-val">${_e(s)}</code></summary>` +
-                `<div class="var-tree-body">` +
-                pairs.map(pair => {
-                    const eq = pair.indexOf('=');
-                    return eq === -1
-                        ? _renderRow('', pair)
-                        : _renderRow(pair.slice(0, eq).trim(), pair.slice(eq + 1).trim());
-                }).join('') +
-                `</div></details>`;
-        }
+    if (children && Object.keys(children).length > 0) {
+        return `<details class="var-tree"><summary class="debug-var-row">` +
+            `<span class="var-tree-arrow"></span>${label}<code class="var-val">${_e(preview)}</code></summary>` +
+            `<div class="var-tree-body">` +
+            Object.entries(children).map(([k, v]) => _renderRow(k, v)).join('') +
+            `</div></details>`;
     }
 
     return `<div class="debug-var-row">` +
-        `<span class="var-tree-spacer"></span>${label}<code class="var-val">${_e(s)}</code></div>`;
+        `<span class="var-tree-spacer"></span>${label}<code class="var-val">${_e(preview)}</code></div>`;
 }
 
 function _renderCurrentStep() {
