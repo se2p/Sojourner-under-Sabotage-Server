@@ -88,7 +88,7 @@ async function save(componentName = currentComponent) {
     // 1 ─ Save test
     if (gameProgress?.status === 'TEST' || gameProgress?.status === 'DEBUGGING') {
         const test = window.editors.monaco.test.getValue();
-        await fetch(`/api/components/${componentName}/test/src`, {
+        await fetch(`${apiUrl}/components/${componentName}/test/src`, {
             method: 'PUT',
             headers: jsonHeader,
             body: JSON.stringify({code: test}),
@@ -110,7 +110,7 @@ async function save(componentName = currentComponent) {
     // 2 ─ Save cut (only in debug mode, after a component was mutated)
     if (gameProgress?.status === 'DEBUGGING') {
         const cut = window.editors.monaco.debug.getValue();
-        await fetch(`/api/components/${componentName}/cut/src`, {
+        await fetch(`${apiUrl}/components/${componentName}/cut/src`, {
             method: 'PUT',
             headers: jsonHeader,
             body: JSON.stringify({code: cut}),
@@ -702,7 +702,7 @@ const execute = async () => {
         await save(componentName); // save CUT
     }
 
-    return fetch(`/api/components/${componentName}/test/execute`, {
+    return fetch(`${apiUrl}/components/${componentName}/test/execute`, {
         method: 'POST',
         headers: jsonHeader,
         body: JSON.stringify({code}),
@@ -783,7 +783,7 @@ async function resetCut() {
 
     Popup.instance.open('reset cut').addButton('Reset', () => {
         Popup.instance.open('wait', {'for': 'Resetting the class under test'});
-        fetch(`/api/components/${componentName}/cut/reset`, {headers: jsonHeader, method: 'POST'})
+        fetch(`${apiUrl}/components/${componentName}/cut/reset`, {headers: jsonHeader, method: 'POST'})
             .then(res => {
                 if (res.ok) {
                     res.json().then(/** @param {SourceDTO} json */json => {
@@ -819,7 +819,7 @@ async function getComponentData(componentName, useCache = true) {
     }
 
     if (!data.cut || !useCache) {
-        await fetch(`/api/components/${componentName}/cut/src`, {headers: authHeader}).then(res => {
+        await fetch(`${apiUrl}/components/${componentName}/cut/src`, {headers: authHeader}).then(res => {
             if (!res.ok) {
                 onError(res);
             } else {
@@ -831,7 +831,7 @@ async function getComponentData(componentName, useCache = true) {
     }
 
     if (!data.test || !useCache) {
-        await fetch(`/api/components/${componentName}/test/src`, {headers: authHeader}).then(res => {
+        await fetch(`${apiUrl}/components/${componentName}/test/src`, {headers: authHeader}).then(res => {
             if (!res.ok) {
                 onError(res);
             } else {
@@ -992,20 +992,20 @@ es.registerHandler(
     }
 );
 es.registerHandler(
-    'ComponentTestsExtendedEvent',
-    /** @param {{componentName:string, addedTestMethodName:string}} evt */
-    evt => {
-        fetch(`/api/components/${evt.componentName}/test/src`, {headers: authHeader})
-            .then(res => res.json())
-            .then(/** @param {SourceDTO} test */ async test => {
-                const data = await getComponentData(evt.componentName);
-                data.test = test;
-                componentData.set(evt.componentName, data);
-                console.log('Test for ' + evt.componentName + ' extended with ' + evt.addedTestMethodName);
-                // Is also fired when destroyed now, so only show the popup if it's happening during debugging
-                if (gameProgress.status === "DEBUGGING") {
-                    Popup.instance.open('test extended', evt);
-                }
+  'ComponentTestsExtendedEvent',
+  /** @param {{componentName:string, addedTestMethodName:string}} evt */
+  evt => {
+      fetch(`${apiUrl}/components/${evt.componentName}/test/src`, {headers: authHeader})
+        .then(res => res.json())
+        .then(/** @param {SourceDTO} test */ async test => {
+            const data = await getComponentData(evt.componentName);
+            data.test = test;
+            componentData.set(evt.componentName, data);
+            console.log('Test for ' + evt.componentName + ' extended with ' + evt.addedTestMethodName);
+            // Is also fired when destroyed now, so only show the popup if it's happening during debugging
+            if (gameProgress.status === "DEBUGGING") {
+                Popup.instance.open('test extended', evt);
+            }
 
                 if (currentComponent === evt.componentName) {
                     window.editors.monaco.test.setValue(test.sourceCode);
