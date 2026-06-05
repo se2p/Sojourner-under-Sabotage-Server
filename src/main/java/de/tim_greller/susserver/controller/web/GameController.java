@@ -1,5 +1,6 @@
 package de.tim_greller.susserver.controller.web;
 
+import de.tim_greller.susserver.dto.GameMode;
 import de.tim_greller.susserver.persistence.entity.ComponentEntity;
 import de.tim_greller.susserver.persistence.repository.ComponentRepository;
 import de.tim_greller.susserver.service.game.GameProgressionService;
@@ -19,7 +20,13 @@ public class GameController {
 
     @GetMapping("/reset")
     public String newGame() {
-        gameProgressionService.resetGameProgression();
+        gameProgressionService.resetGameProgression(GameMode.Testing);
+        return "redirect:/game";
+    }
+
+    @GetMapping("/reset-debug")
+    public String newDebugGame() {
+        gameProgressionService.resetGameProgression(GameMode.Debugging);
         return "redirect:/game";
     }
 

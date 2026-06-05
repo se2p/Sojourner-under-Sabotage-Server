@@ -78,7 +78,31 @@ public class ExecutionService {
         clientResultDto.setDebugTrace(iTracker.getDebugTraceForUser(userId));
         clientResultDto.setCoveredLines(mapMap(iTracker.getCoveredLinesForUser(userId), (k, v) -> v.size()));
         clientResultDto.setTotalLines(mapMap(iTracker.getLinesForUser(userId), (k, v) -> v.size()));
+        
+        if (isDebugging(userId)) {
+            verifyDebugFix(componentName, userId, clientResultDto);
+        }
         return clientResultDto;
+    }
+
+    private boolean isDebugging(String userId) {
+        return userGameProgressionRepository.findById(new UserKey(userService.requireCurrentUser()))
+                .map(ugp -> ugp.getStatus() == GameProgressStatus.DEBUGGING)
+                .orElse(false);
+    }
+    
+    private void verifyDebugFix(String componentName, String userId, TestExecutionResultDTO clientResultDto) {
+        try {
+            Class<?> fallbackTestClass = compileFallbackTests(componentName, userId);
+            var fallbackListener = new TestRunListener();
+            TestExecutionResult fallbackResult = run(fallbackTestClass, fallbackListener);
+            clientResultDto.setHiddenTestsPassed(fallbackResult.wasSuccessful());
+            if (fallbackResult.wasSuccessful()) {
+                eventService.publishAndHandleEvent(new ComponentFixedEvent(componentName));
+            }
+        } catch (Exception e) {
+            log.warn("Could not verify debug fix for component {}: {}", componentName, e.getMessage());
+        }
     }
 
     public TestExecutionResultDTO execute(String componentName, String userId)

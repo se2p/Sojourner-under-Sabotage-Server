@@ -862,6 +862,10 @@ async function activateTests() {
 document.getElementById('editor-activate-test-btn').addEventListener('click', activateTests);
 
 
+window.openDebugger = function (componentName) {
+    window.open(`/debug?component=${encodeURIComponent(componentName)}`, '_blank');
+};
+
 window.openEditor = async function (componentName) {
     // Check if the introduction should be shown. Then show it immediately, so the user can read it while the editor is still loading.
     Settings.instance.get(Settings.keys.codeEditorIntroductionShown).then(introductionShown => {

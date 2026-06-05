@@ -182,6 +182,11 @@ class DebugStartEvent extends SusEvent {
   }
 }
 
+class PuzzleSolvedEvent extends SusEvent {
+  static type = ".PuzzleSolvedEvent";
+  type = PuzzleSolvedEvent.type;
+}
+
 class GameProgressionChangedEvent extends SusEvent {
   static type = ".GameProgressionChangedEvent";
   type = GameProgressionChangedEvent.type;

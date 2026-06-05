@@ -397,3 +397,12 @@ function switchTab(name) {
 }
 
 _hideStepper();
+
+const _preselectComponent = new URLSearchParams(window.location.search).get('component');
+if (_preselectComponent) {
+    const select = document.getElementById('component-select');
+    if ([...select.options].some(o => o.value === _preselectComponent)) {
+        select.value = _preselectComponent;
+    }
+    loadComponent(_preselectComponent);
+}

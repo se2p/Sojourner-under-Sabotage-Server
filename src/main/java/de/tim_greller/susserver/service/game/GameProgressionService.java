@@ -8,10 +8,12 @@ import static de.tim_greller.susserver.dto.GameProgressStatus.DEBUGGING;
 import static de.tim_greller.susserver.dto.GameProgressStatus.DESTROYED;
 import static de.tim_greller.susserver.dto.GameProgressStatus.DOOR;
 import static de.tim_greller.susserver.dto.GameProgressStatus.MUTATED;
+import static de.tim_greller.susserver.dto.GameProgressStatus.PUZZLE;
 import static de.tim_greller.susserver.dto.GameProgressStatus.TALK;
 import static de.tim_greller.susserver.dto.GameProgressStatus.TEST;
 import static de.tim_greller.susserver.dto.GameProgressStatus.TESTS_ACTIVE;
 
+import de.tim_greller.susserver.dto.GameMode;
 import de.tim_greller.susserver.dto.GameProgressStatus;
 import de.tim_greller.susserver.dto.UserGameProgressionDTO;
 import de.tim_greller.susserver.events.ComponentDestroyedEvent;
@@ -23,6 +25,7 @@ import de.tim_greller.susserver.events.GameFinishedEvent;
 import de.tim_greller.susserver.events.GameProgressionChangedEvent;
 import de.tim_greller.susserver.events.GameStartedEvent;
 import de.tim_greller.susserver.events.MutatedComponentTestsFailedEvent;
+import de.tim_greller.susserver.events.PuzzleSolvedEvent;
 import de.tim_greller.susserver.events.RoomUnlockedEvent;
 import de.tim_greller.susserver.persistence.entity.UserEntity;
 import de.tim_greller.susserver.persistence.entity.UserGameProgressionEntity;
@@ -70,6 +73,7 @@ public class GameProgressionService {
         eventService.registerHandler(MutatedComponentTestsFailedEvent.class, this::handleMutatedComponentTestsFailed);
         eventService.registerHandler(DebugStartEvent.class, this::handleDebugStart);
         eventService.registerHandler(ComponentFixedEvent.class, this::handleComponentFixed);
+        eventService.registerHandler(PuzzleSolvedEvent.class, this::handlePuzzleSolved);
     }
 
     public void handleComponentTestsActivated(ComponentTestsActivatedEvent event) {
@@ -100,13 +104,13 @@ public class GameProgressionService {
         gameLoop();
 
         // handle DESTROYED and MUTATED states
-        if (List.of(DESTROYED, MUTATED, DEBUGGING).contains(gameProgression.getStatus())) {
+        if (GameMode.Testing.equals(gameProgression.getMode()) && List.of(DESTROYED, MUTATED, DEBUGGING).contains(gameProgression.getStatus())) {
             // RESET game progression to TEST_ACTIVE, so that test failures will trigger
             gameProgression.setStatus(TESTS_ACTIVE);
             userGameProgressionRepository.save(gameProgression);
             componentStatusService.attackCut(gameProgression.getGameProgression().getComponent().getName());
         } else {
-            // send initial game progression to the client (DOOR, TALK, TEST, DEBUGGING)
+            // send initial game progression to the client (DOOR, TALK, TEST, PUZZLE, DEBUGGING)
             changeGameProgression(userGameProgressionRepository.findById(currentUser()).orElseThrow());
         }
     }
@@ -140,7 +144,7 @@ public class GameProgressionService {
         var newProgression = newProgressionOpt.get();
 
         userProgress.setGameProgression(newProgression);
-        userProgress.setStatus(newProgression.getStage() == 1 ? DOOR : TESTS_ACTIVE);
+        userProgress.setStatus(GameMode.Debugging.equals(userProgress.getMode()) || newProgression.getStage() == 1 ? DOOR : TESTS_ACTIVE);
         userGameProgressionRepository.save(userProgress);
         changeGameProgression(userProgress);
         log.info("componentFixedEvent changed game progression to: {}", newProgression);
@@ -163,9 +167,18 @@ public class GameProgressionService {
     private void handleConversationFinished(ConversationFinishedEvent conversationFinishedEvent) {
         UserGameProgressionEntity userGameProgression = userGameProgressionRepository.findById(currentUser()).orElseThrow();
         if (userGameProgression.getStatus() == TALK) {
-            userGameProgression.setStatus(TEST);
+            userGameProgression.setStatus(GameMode.Debugging.equals(userGameProgression.getMode()) ? PUZZLE : TEST);
             userGameProgressionRepository.save(userGameProgression);
             changeGameProgression(userGameProgression);
+        }
+    }
+    
+    private void handlePuzzleSolved(PuzzleSolvedEvent puzzleSolvedEvent) {
+        var gameProgression = userGameProgressionRepository.findById(currentUser()).orElseThrow();
+        if (GameMode.Debugging.equals(gameProgression.getMode()) && gameProgression.getStatus() == PUZZLE) {
+            gameProgression.setStatus(DEBUGGING);
+            userGameProgressionRepository.save(gameProgression);
+            changeGameProgression(gameProgression);
         }
     }
 
@@ -212,12 +225,21 @@ public class GameProgressionService {
             componentStatusService.attackCut(componentName);
         }
     }
+    //todo: avoid hard coding / change index system
+    private static final int TESTING_START_INDEX = 1;
+    private static final int DEBUGGING_START_INDEX = 1001;
 
     public void resetGameProgression() {
+        resetGameProgression(GameMode.Testing);
+    }
+
+    public void resetGameProgression(GameMode mode) {
         componentStatusService.resetComponentStatus(currentUser().getUser().getUsername());
+        int startIndex = mode == GameMode.Debugging ? DEBUGGING_START_INDEX : TESTING_START_INDEX;
         var gameProgression = UserGameProgressionEntity.builder()
-                .gameProgression(gameProgressionRepository.getReferenceById(1))
+                .gameProgression(gameProgressionRepository.getReferenceById(startIndex))
                 .status(TALK)
+                .mode(mode)
                 .user(currentUser())
                 .build();
         userGameProgressionRepository.save(gameProgression);
@@ -249,6 +271,7 @@ public class GameProgressionService {
                 .componentName(ugp.getGameProgression().getComponent().getName())
                 .stage(ugp.getGameProgression().getStage())
                 .status(ugp.getStatus())
+                .mode(ugp.getMode() == null ? GameMode.Testing : ugp.getMode())
                 .build();
     }
 
