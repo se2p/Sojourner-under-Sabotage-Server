@@ -34,6 +34,7 @@ window.editors.monaco.debug = monaco.editor.create(
     }
 );
 
+// The runner is read-only: it just shows the fixed "main method" that drives the class
 window.editors.monaco.runner = monaco.editor.create(
     document.getElementById('monaco-container-runner'), {
         value: '',
@@ -43,6 +44,7 @@ window.editors.monaco.runner = monaco.editor.create(
         fontSize: 14,
         glyphMargin: true,
         minimap: { enabled: false },
+        readOnly: true,
     }
 );
 
@@ -56,11 +58,13 @@ document.getElementById('component-select').addEventListener('change', function 
     if (this.value) loadComponent(this.value);
 });
 
+// Load a component's class source and runner template into the two editors
 async function loadComponent(name) {
     currentComponent = name;
     window.editors.monaco.debug.setValue('// loading…');
     window.editors.monaco.runner.setValue('// loading…');
     _hideStepper();
+    setDebuggerTabVisible(false);
     renderStatus('');
 
     const [cutRes, mainRes] = await Promise.all([
@@ -79,9 +83,11 @@ async function loadComponent(name) {
     window.editors.monaco.runner.setValue(runnerCode);
 
     document.getElementById('editor-execute-btn').disabled = false;
+    document.getElementById('editor-debug-btn').disabled = false;
     document.getElementById('editor-reset-cut-btn').style.display = 'block';
 }
 
+// Persist the edited class source back to the server
 async function saveCut() {
     if (!currentComponent) return;
     const statusInfo = document.getElementById('editor-status-text');
@@ -96,11 +102,18 @@ async function saveCut() {
 }
 
 const execBtn = document.getElementById('editor-execute-btn');
+const debugBtn = document.getElementById('editor-debug-btn');
 
-const execute = async () => {
+function setExecuteDisabled(disabled) {
+    execBtn.disabled = disabled;
+    debugBtn.disabled = disabled;
+}
+
+// Save, send the wrapped runner to the server, and render the (optionally debug) result
+const execute = async (debug = false) => {
     if (!currentComponent) { renderStatus('<p class="clr-error">No component selected.</p>'); return; }
-    renderStatus('<p>Running…</p>');
-    execBtn.disabled = true;
+    renderStatus(debug ? '<p>Debugging…</p>' : '<p>Running…</p>');
+    setExecuteDisabled(true);
 
     await saveCut();
 
@@ -113,12 +126,12 @@ const execute = async () => {
     }).catch(e => {
         console.error(e);
         renderStatus('<p class="clr-error">Network error.</p>');
-        execBtn.disabled = false;
+        setExecuteDisabled(false);
         return null;
     });
 
     if (!res) return;
-    execBtn.disabled = false;
+    setExecuteDisabled(false);
 
     if (res.status === 401) {
         renderStatus('<p class="clr-error">Session expired. <a href="/login">Login again.</a></p>');
@@ -133,14 +146,38 @@ const execute = async () => {
 
     const obj = await res.json();
     console.log('Execution result:', obj);
-    handleExecutionResult(obj);
+    handleExecutionResult(obj, debug);
 };
 
-execBtn.addEventListener('click', execute);
+execBtn.addEventListener('click', () => execute(false));
+debugBtn.addEventListener('click', () => execute(true));
 
-function handleExecutionResult(obj) {
+/**
+ * Show or hide the "Debugger" tab. The tab (and its trace output) only appears
+ * after an explicit Debug run.
+ * @param {boolean} visible
+ */
+function setDebuggerTabVisible(visible) {
+    const tabBtn = document.getElementById('tab-btn-debugger');
+    tabBtn.style.display = visible ? '' : 'none';
+    if (!visible && tabBtn.classList.contains('active')) {
+        switchTab('results');
+    }
+}
+
+/**
+ * @param obj
+ * @param {boolean} showDebug whether to reveal the debug trace / debugger tab
+ */
+function handleExecutionResult(obj, showDebug = false) {
     renderLogs(obj.logs);
-    renderDebugTrace(obj.debugTrace);
+    if (showDebug) {
+        setDebuggerTabVisible(true);
+        renderDebugTrace(obj.debugTrace);
+    } else {
+        _hideStepper();
+        setDebuggerTabVisible(false);
+    }
 
     if (obj.testStatus === 'PASSED') {
         renderStatus('');
@@ -185,6 +222,7 @@ document.addEventListener('keydown', ev => {
 
 const statusEl = document.getElementById('execution-result');
 
+// Force Monaco to recompute its layout after the panel resizes
 function _relayoutEditors() {
     const containers = document.querySelectorAll('.monaco-editor-container');
     containers.forEach(el => el.style.height = '0');
@@ -193,6 +231,7 @@ function _relayoutEditors() {
     containers.forEach(el => el.style.height = 'initial');
 }
 
+// Show HTML status in the results pane and reveal/scroll the bottom panel
 function renderStatus(content) {
     statusEl.innerHTML = content;
     if (content) {
@@ -208,6 +247,7 @@ const _e = (() => {
     return (s) => { enc.innerText = s ?? ''; return enc.innerHTML; };
 })();
 
+// Render one variable row, recursing into a collapsible tree for compound values
 function _renderRow(name, node) {
     const label = `<span class="var-name">${_e(String(name))}</span><span class="var-eq">=</span>`;
     const preview = node?.preview ?? '';
@@ -225,6 +265,7 @@ function _renderRow(name, node) {
         `<span class="var-tree-spacer"></span>${label}<code class="var-val">${_e(preview)}</code></div>`;
 }
 
+// Decorate the class editor's lines with log glyphs from the execution result
 function renderLogs(logs) {
     const id = (window.cutClassName ?? '') + '#' + window.userId;
     const decos = (logs?.[id] ?? []).map(log => ({
@@ -248,6 +289,7 @@ let _debugStepIndex = 0;
 const _breakpoints   = { debug: new Set(), test: new Set() };
 const _bpDecorations = { debug: [], test: [] };
 
+// Add/remove a breakpoint on a line and redraw the gutter markers
 function _toggleBreakpoint(editorKey, lineNumber) {
     const editor = window.editors.monaco[editorKey];
     if (!editor) return;
@@ -257,6 +299,7 @@ function _toggleBreakpoint(editorKey, lineNumber) {
     _renderBreakpointDecorations(editorKey);
 }
 
+// Redraw all breakpoint glyphs for one editor
 function _renderBreakpointDecorations(editorKey) {
     const editor = window.editors.monaco[editorKey];
     if (!editor) return;
@@ -273,6 +316,7 @@ function _renderBreakpointDecorations(editorKey) {
     );
 }
 
+// Wire gutter clicks in both editors to breakpoint toggling
 (function _attachBreakpointHandlers() {
     const M = monaco.editor.MouseTargetType;
     const gutter = new Set([M.GUTTER_GLYPH_MARGIN, M.GUTTER_LINE_NUMBERS, M.GUTTER_LINE_DECORATIONS]);
@@ -286,6 +330,7 @@ function _renderBreakpointDecorations(editorKey) {
     });
 })();
 
+// Merge class + runner steps in execution order and start the stepper
 function renderDebugTrace(debugTrace) {
     const cutId    = (window.cutClassName  ?? '') + '#' + window.userId;
     const runnerId = (window.testClassName ?? '') + '#' + window.userId;
@@ -298,6 +343,9 @@ function renderDebugTrace(debugTrace) {
     _debugStepIndex = 0;
 
     if (!_debugSteps) { _hideStepper(); return; }
+    
+    _debugStepIndex = _firstBreakpointIndex();
+
     document.getElementById('bottom-panel').setAttribute('aria-hidden', 'false');
     switchTab('debugger');
     setTimeout(() => document.getElementById('bottom-panel').scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 50);
@@ -305,12 +353,25 @@ function renderDebugTrace(debugTrace) {
     _renderCurrentStep();
 }
 
+// Index of the first step sitting on a breakpoint, or the last step if none
+function _firstBreakpointIndex() {
+    if (!_debugSteps) return 0;
+    for (let i = 0; i < _debugSteps.length; i++) {
+        const step = _debugSteps[i];
+        const editorKey = step._source === 'cut' ? 'debug' : 'test';
+        if (_breakpoints[editorKey].has(_visibleLine(step))) return i;
+    }
+    return _debugSteps.length - 1;
+}
+
+// Map a step's server line to the line shown in its editor
 function _visibleLine(step) {
     return step._source === 'runner'
         ? runnerDisplayLine(step.lineNumber)
         : step.lineNumber;
 }
 
+// Render the current step: label, nav button state, variables and line highlight
 function _renderCurrentStep() {
     if (!_debugSteps) return;
     const step     = _debugSteps[_debugStepIndex];
@@ -341,6 +402,7 @@ function debugStepPrev() {
 function debugStepNext() {
     if (_debugSteps && _debugStepIndex < _debugSteps.length - 1) { _debugStepIndex++; _renderCurrentStep(); }
 }
+// Jump to the next step on a breakpoint, else to the final step
 function debugContinue() {
     if (!_debugSteps) return;
     for (let i = _debugStepIndex + 1; i < _debugSteps.length; i++) {
@@ -356,6 +418,7 @@ function debugContinue() {
 
 const _currentLineDecors = { debug: [], test: [] };
 
+// Highlight the active line in the relevant editor and clear the other
 function _highlightDebugLine(visibleLine, source) {
     const editorMap = { debug: window.editors.monaco.debug, test: window.editors.monaco.runner };
     ['debug', 'test'].forEach(key => {
@@ -378,6 +441,7 @@ function _highlightDebugLine(visibleLine, source) {
     }
 }
 
+// Reset the stepper UI to its empty "no trace" state
 function _hideStepper() {
     _highlightDebugLine(0, 'cut');
     _highlightDebugLine(0, 'runner');
@@ -389,6 +453,7 @@ function _hideStepper() {
         '<div class="no-vars">No trace available yet</div>';
 }
 
+// Toggle the active bottom-panel tab (debugger/results)
 function switchTab(name) {
     ['debugger', 'results'].forEach(t => {
         document.getElementById(`tab-btn-${t}`).classList.toggle('active', t === name);
@@ -397,6 +462,7 @@ function switchTab(name) {
 }
 
 _hideStepper();
+setDebuggerTabVisible(false);
 
 const _preselectComponent = new URLSearchParams(window.location.search).get('component');
 if (_preselectComponent) {

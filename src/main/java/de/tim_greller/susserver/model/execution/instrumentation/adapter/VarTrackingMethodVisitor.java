@@ -6,6 +6,8 @@ import org.springframework.asm.MethodVisitor;
 import org.springframework.asm.Opcodes;
 import org.springframework.asm.Type;
 
+// Shared base visitor that injects InstrumentationTracker calls
+// (extracted from the cut/test adapters to avoid duplication)
 abstract class VarTrackingMethodVisitor extends MethodVisitor {
 
     private final String classId;
@@ -17,6 +19,7 @@ abstract class VarTrackingMethodVisitor extends MethodVisitor {
         this.methodName = methodName;
     }
 
+    // On every variable STORE, reload the stored value and report it to trackVar
     @Override
     public void visitVarInsn(int opcode, int varIndex) {
         super.visitVarInsn(opcode, varIndex);
@@ -42,6 +45,7 @@ abstract class VarTrackingMethodVisitor extends MethodVisitor {
         }
     }
 
+    // IINC bypasses visitVarInsn, so report the incremented int separately
     @Override
     public void visitIincInsn(int varIndex, int increment) {
         super.visitIincInsn(varIndex, increment);
@@ -57,6 +61,7 @@ abstract class VarTrackingMethodVisitor extends MethodVisitor {
                 false);
     }
 
+    // At each line: record the line visit and create a debug step
     @Override
     public void visitLineNumber(int pLine, Label pStart) {
         super.visitLineNumber(pLine, pStart);
@@ -79,6 +84,7 @@ abstract class VarTrackingMethodVisitor extends MethodVisitor {
                 false);
     }
 
+    // Register each local variable name or descriptor so stored values can be resolved
     @Override
     public void visitLocalVariable(String name, String descriptor, String signature,
                                    Label start, Label end, int index) {

@@ -10,6 +10,7 @@ import java.util.stream.Stream;
 
 import static java.nio.charset.StandardCharsets.UTF_8;
 
+import de.tim_greller.susserver.dto.GameMode;
 import de.tim_greller.susserver.persistence.entity.CutEntity;
 import de.tim_greller.susserver.persistence.entity.DebugMainEntity;
 import de.tim_greller.susserver.persistence.entity.FallbackTestEntity;
@@ -87,12 +88,12 @@ public class InsertInitialData implements CommandLineRunner {
         if (initData) {
             readAndSaveCuts();
             readAndSaveFallbackTests();
-            readAndSaveGameProgression(gameProgressionCSV);
+            readAndSaveGameProgression(gameProgressionCSV, GameMode.Testing);
 
             readAndSaveDebugCuts();
             readAndSaveDebugTests();
             readAndSaveDebugMains();
-            readAndSaveGameProgression(debugProgressionCSV);
+            readAndSaveGameProgression(debugProgressionCSV, GameMode.Debugging);
 
             readAndSavePatches();
             readAndSaveDebugPatches();
@@ -139,6 +140,7 @@ public class InsertInitialData implements CommandLineRunner {
         readPatchesFromPattern(mutantPattern);
     }
 
+    // Load the debug strand's classes-under-test from debug-cut/ and store them as CUTs
     private void readAndSaveDebugCuts() throws IOException {
         ResourcePatternResolver resolver = ResourcePatternUtils.getResourcePatternResolver(resourceLoader);
         for (Resource resource : resolver.getResources(debugCutPattern)) {
@@ -151,7 +153,8 @@ public class InsertInitialData implements CommandLineRunner {
         }
     }
 
-    //todo: refactor
+    //todo: refactor duplicate lines
+    // Load the debug strand's hidden fallback tests from debug-test/
     private void readAndSaveDebugTests() throws IOException {
         ResourcePatternResolver resolver = ResourcePatternUtils.getResourcePatternResolver(resourceLoader);
         for (Resource resource : resolver.getResources(debugTestPattern)) {
@@ -165,6 +168,7 @@ public class InsertInitialData implements CommandLineRunner {
         }
     }
 
+    // Load the debug strand's main/entry-point sources from debug-main/
     private void readAndSaveDebugMains() throws IOException {
         ResourcePatternResolver resolver = ResourcePatternUtils.getResourcePatternResolver(resourceLoader);
         for (Resource resource : resolver.getResources(debugMainPattern)) {
@@ -213,20 +217,21 @@ public class InsertInitialData implements CommandLineRunner {
                 .findAny().orElseThrow();
     }
 
-    private void readAndSaveGameProgression(String csvPath) throws IOException {
+    private void readAndSaveGameProgression(String csvPath, GameMode mode) throws IOException {
         ResourcePatternResolver resolver = ResourcePatternUtils.getResourcePatternResolver(resourceLoader);
         Resource resource = resolver.getResource(csvPath);
 
         try (Stream<String> lines = new BufferedReader(new InputStreamReader(resource.getInputStream(), UTF_8)).lines()) {
             lines.skip(1) // Skip the header line
                     .map(line -> line.split(";"))
-                    .map(this::createGameProgressionEntity)
+                    .map(values -> createGameProgressionEntity(values, mode))
                     .forEach(gameProgressionRepository::save);
         }
     }
 
-    private GameProgressionEntity createGameProgressionEntity(String[] values) {
+    private GameProgressionEntity createGameProgressionEntity(String[] values, GameMode mode) {
         return GameProgressionEntity.builder()
+                .mode(mode)
                 .orderIndex(Integer.parseInt(values[0]))
                 .roomId(Integer.parseInt(values[1]))
                 .component(componentRepository.getOrCreate(values[2]))

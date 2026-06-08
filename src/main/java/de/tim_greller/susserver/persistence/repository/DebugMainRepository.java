@@ -11,6 +11,7 @@ import org.springframework.stereotype.Repository;
 @Repository
 public interface DebugMainRepository extends JpaRepository<DebugMainEntity, ComponentStageKey> {
 
+    // Look up a debug main by component name and stage
     @Query("""
             SELECT d
             FROM DebugMainEntity d

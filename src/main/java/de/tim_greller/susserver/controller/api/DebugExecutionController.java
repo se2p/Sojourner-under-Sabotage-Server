@@ -29,6 +29,7 @@ public class DebugExecutionController {
     private final ExecutionService executionService;
     private final DebugMainRepository debugMainRepository;
 
+    // Run debug runner and return the result including the debug trace
     @PostMapping(value = "${paths.api}/components/{componentName}/debug/execute")
     public @ResponseBody TestExecutionResultDTO executeDebugRunner(
             @PathVariable String componentName,
@@ -46,6 +47,7 @@ public class DebugExecutionController {
         }
     }
 
+    // Return the debug main source for a component and stage
     @GetMapping(value = "${paths.api}/components/{componentName}/debug/main")
     public @ResponseBody PlainSource getDebugMain(
             @PathVariable String componentName,

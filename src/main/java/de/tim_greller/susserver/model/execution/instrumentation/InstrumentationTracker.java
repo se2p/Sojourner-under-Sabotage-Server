@@ -115,6 +115,7 @@ public class InstrumentationTracker {
         trackVar((Double) value, pVarIndex, pClassName, methodName);
     }
 
+    // Called from instrumented bytecode whenever a field is written; one overload per primitive/object type
     @SuppressWarnings("unused")
     public static void trackField(final int value, final String fieldName, final String pClassName, final String methodName) {
         classTrackers.computeIfAbsent(pClassName, k -> new ClassTracker()).trackFieldValueChanged(value, fieldName);
@@ -140,6 +141,7 @@ public class InstrumentationTracker {
         classTrackers.computeIfAbsent(pClassName, k -> new ClassTracker()).trackFieldValueChanged(value, fieldName);
     }
 
+    // Like trackField but renders the int operand back into a boolean string
     @SuppressWarnings("unused")
     public static void trackFieldBool(final int value, final String fieldName, final String pClassName, final String methodName) {
         classTrackers.computeIfAbsent(pClassName, k -> new ClassTracker()).trackFieldValueChanged(Boolean.toString(value != 0), fieldName);
@@ -162,6 +164,7 @@ public class InstrumentationTracker {
                 .trackLog(message, methodName);
     }
 
+    // Called on every line visit: assigns a global per-user step index and snapshots the current variable state
     @SuppressWarnings("unused")
     public static void trackDebugStep(final int pLineNumber, final String pClassName, final String methodName) {
         final String userId = pClassName.contains("#")
@@ -282,6 +285,7 @@ public class InstrumentationTracker {
             liveVarState.put(varName, value);
         }
 
+        // Append a DebugStep snapshotting every currently live variable for this line
         void captureDebugStep(final int lineNumber, final String methodName, final int globalIndex) {
             Map<String, DebugValue> snapshot = new LinkedHashMap<>();
             liveVarState.forEach((qualifiedName, value) -> {
@@ -301,6 +305,8 @@ public class InstrumentationTracker {
             return toDebugValue(value, 0, Collections.newSetFromMap(new IdentityHashMap<>()));
         }
         
+        // Recursively turn a value into a structured DebugValue tree (arrays/collections/maps/fields),
+        // bounded by MAX_DEPTH/MAX_ITEMS and guarded against cycles via the seen set
         private static DebugValue toDebugValue(Object value, int depth, Set<Object> seen) {
             final String preview = formatValue(value);
             if (value == null) return new DebugValue("null", preview, null);
@@ -364,6 +370,7 @@ public class InstrumentationTracker {
             return formatValue(value, 0, Collections.newSetFromMap(new IdentityHashMap<>()));
         }
 
+        // Build a readable one-line preview string of a value, recursing into arrays/collections/maps/fields
         private static String formatValue(Object value, int depth, Set<Object> seen) {
             if (value == null) return "null";
             switch (value.getClass().getName()) {
@@ -396,7 +403,7 @@ public class InstrumentationTracker {
             }
 
             if (value instanceof String str) {
-                // quote may be redundant due to new propagation
+                //todo quote may be redundant due to new propagation
                 return "\"" + str.replace("\\", "\\\\").replace("\"", "\\\"") + "\"";
             }
             if (value instanceof Number || value instanceof Boolean
@@ -439,6 +446,7 @@ public class InstrumentationTracker {
             }
         }
 
+        // Render a collection as "[a, b, …]"
         private static String formatList(Collection<?> col, int depth, Set<Object> seen) {
             StringBuilder sb = new StringBuilder("[");
             int i = 0;
@@ -453,6 +461,7 @@ public class InstrumentationTracker {
             return sb.append(']').toString();
         }
 
+        // Render an arbitrary object as "ClassName{field=value, ...}" by loop over its declared fields
         private static String formatObject(Object value, int depth, Set<Object> seen) {
             StringBuilder sb = new StringBuilder(value.getClass().getSimpleName()).append('{');
             boolean any = false;

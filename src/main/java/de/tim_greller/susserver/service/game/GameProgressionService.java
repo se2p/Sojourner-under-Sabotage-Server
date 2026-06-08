@@ -27,6 +27,7 @@ import de.tim_greller.susserver.events.GameStartedEvent;
 import de.tim_greller.susserver.events.MutatedComponentTestsFailedEvent;
 import de.tim_greller.susserver.events.PuzzleSolvedEvent;
 import de.tim_greller.susserver.events.RoomUnlockedEvent;
+import de.tim_greller.susserver.persistence.entity.GameProgressionEntity;
 import de.tim_greller.susserver.persistence.entity.UserEntity;
 import de.tim_greller.susserver.persistence.entity.UserGameProgressionEntity;
 import de.tim_greller.susserver.persistence.keys.UserKey;
@@ -104,7 +105,7 @@ public class GameProgressionService {
         gameLoop();
 
         // handle DESTROYED and MUTATED states
-        if (GameMode.Testing.equals(gameProgression.getMode()) && List.of(DESTROYED, MUTATED, DEBUGGING).contains(gameProgression.getStatus())) {
+        if (isTesting(gameProgression) && List.of(DESTROYED, MUTATED, DEBUGGING).contains(gameProgression.getStatus())) {
             // RESET game progression to TEST_ACTIVE, so that test failures will trigger
             gameProgression.setStatus(TESTS_ACTIVE);
             userGameProgressionRepository.save(gameProgression);
@@ -135,7 +136,8 @@ public class GameProgressionService {
             return;
         }
 
-        var newProgressionOpt = gameProgressionRepository.findById(progression.getOrderIndex() + 1);
+        var newProgressionOpt = gameProgressionRepository
+                .findNextProgression(progression.getMode(), progression.getOrderIndex());
         if (newProgressionOpt.isEmpty()) {
             // TODO: handle game finished on max level reached
             eventService.publishEvent(new GameFinishedEvent());
@@ -144,7 +146,8 @@ public class GameProgressionService {
         var newProgression = newProgressionOpt.get();
 
         userProgress.setGameProgression(newProgression);
-        userProgress.setStatus(GameMode.Debugging.equals(userProgress.getMode()) || newProgression.getStage() == 1 ? DOOR : TESTS_ACTIVE);
+        var nextRoomStatus = isDebugging(userProgress) || newProgression.getStage() == 1 ? DOOR : TESTS_ACTIVE;
+        userProgress.setStatus(nextRoomStatus);
         userGameProgressionRepository.save(userProgress);
         changeGameProgression(userProgress);
         log.info("componentFixedEvent changed game progression to: {}", newProgression);
@@ -167,15 +170,16 @@ public class GameProgressionService {
     private void handleConversationFinished(ConversationFinishedEvent conversationFinishedEvent) {
         UserGameProgressionEntity userGameProgression = userGameProgressionRepository.findById(currentUser()).orElseThrow();
         if (userGameProgression.getStatus() == TALK) {
-            userGameProgression.setStatus(GameMode.Debugging.equals(userGameProgression.getMode()) ? PUZZLE : TEST);
+            userGameProgression.setStatus(isDebugging(userGameProgression) ? PUZZLE : TEST);
             userGameProgressionRepository.save(userGameProgression);
             changeGameProgression(userGameProgression);
         }
     }
     
+    // Debug strand: advance from the concept puzzle into the actual debugging step
     private void handlePuzzleSolved(PuzzleSolvedEvent puzzleSolvedEvent) {
         var gameProgression = userGameProgressionRepository.findById(currentUser()).orElseThrow();
-        if (GameMode.Debugging.equals(gameProgression.getMode()) && gameProgression.getStatus() == PUZZLE) {
+        if (isDebugging(gameProgression) && gameProgression.getStatus() == PUZZLE) {
             gameProgression.setStatus(DEBUGGING);
             userGameProgressionRepository.save(gameProgression);
             changeGameProgression(gameProgression);
@@ -225,19 +229,15 @@ public class GameProgressionService {
             componentStatusService.attackCut(componentName);
         }
     }
-    //todo: avoid hard coding / change index system
-    private static final int TESTING_START_INDEX = 1;
-    private static final int DEBUGGING_START_INDEX = 1001;
-
     public void resetGameProgression() {
         resetGameProgression(GameMode.Testing);
     }
 
+    // Restart the game from the first progression of the given strand (testing or debugging)
     public void resetGameProgression(GameMode mode) {
         componentStatusService.resetComponentStatus(currentUser().getUser().getUsername());
-        int startIndex = mode == GameMode.Debugging ? DEBUGGING_START_INDEX : TESTING_START_INDEX;
         var gameProgression = UserGameProgressionEntity.builder()
-                .gameProgression(gameProgressionRepository.getReferenceById(startIndex))
+                .gameProgression(firstProgressionOf(mode))
                 .status(TALK)
                 .mode(mode)
                 .user(currentUser())
@@ -249,11 +249,17 @@ public class GameProgressionService {
 
     public void initGameProgression(UserEntity user) {
         var gameProgression = UserGameProgressionEntity.builder()
-                .gameProgression(gameProgressionRepository.getReferenceById(1))
+                .gameProgression(firstProgressionOf(GameMode.Testing))
                 .status(TALK)
+                .mode(GameMode.Testing)
                 .user(new UserKey(user))
                 .build();
         userGameProgressionRepository.save(gameProgression);
+    }
+
+    private GameProgressionEntity firstProgressionOf(GameMode mode) {
+        return gameProgressionRepository.findFirstProgression(mode)
+                .orElseThrow(() -> new IllegalStateException("No game progression configured for mode " + mode));
     }
 
     public Optional<UserGameProgressionDTO> getCurrentGameProgression() {
@@ -262,6 +268,14 @@ public class GameProgressionService {
 
     private UserKey currentUser() {
         return new UserKey(userService.requireCurrentUser());
+    }
+    
+    private static boolean isDebugging(UserGameProgressionEntity ugp) {
+        return GameMode.Debugging.equals(ugp.getMode());
+    }
+
+    private static boolean isTesting(UserGameProgressionEntity ugp) {
+        return GameMode.Testing.equals(ugp.getMode());
     }
 
     private UserGameProgressionDTO toDTO(UserGameProgressionEntity ugp) {

@@ -24,6 +24,7 @@ public class GameController {
         return "redirect:/game";
     }
 
+    // Start a fresh game in the debugging strand
     @GetMapping("/reset-debug")
     public String newDebugGame() {
         gameProgressionService.resetGameProgression(GameMode.Debugging);
@@ -37,6 +38,7 @@ public class GameController {
         return "game";
     }
     //todo remove/rework used for testing
+    // Open the standalone debug editor with all component names preloaded
     @GetMapping("/debug")
     public String debugEditor(Model model) {
         var components = componentRepository.findAll()

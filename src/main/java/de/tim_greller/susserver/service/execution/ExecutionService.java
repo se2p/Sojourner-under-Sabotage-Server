@@ -1,7 +1,6 @@
 package de.tim_greller.susserver.service.execution;
 
 import java.util.List;
-import java.util.Map;
 import java.util.Timer;
 import java.util.TimerTask;
 
@@ -10,7 +9,6 @@ import static de.tim_greller.susserver.dto.TestStatus.PASSED;
 import static de.tim_greller.susserver.util.Utils.mapMap;
 
 import de.tim_greller.susserver.dto.GameProgressStatus;
-import de.tim_greller.susserver.dto.TestDetailsDTO;
 import de.tim_greller.susserver.dto.TestExecutionResultDTO;
 import de.tim_greller.susserver.dto.TestSourceDTO;
 import de.tim_greller.susserver.dto.TestStatus;
@@ -56,48 +54,37 @@ public class ExecutionService {
     @Value("${jarsToInclude}") private List<String> jarsToInclude;
 
 
-    //temp
+    // Compile and run the user's debug runner, then verify the fix if the player is in debug mode
     public TestExecutionResultDTO executeDebugRunner(String componentName, String userId, String runnerCode)
             throws ClassLoadException, NotFoundException, TestExecutionException, CompilationException {
-        final var iTracker = InstrumentationTracker.getInstance();
-        iTracker.clearForUser(userId);
-        final var clientResultDto = new TestExecutionResultDTO();
+        InstrumentationTracker.getInstance().clearForUser(userId);
 
         var runnerSource = new TestSourceDTO(componentName, "DebugRunner", runnerCode, List.of());
         final Class<?> testClass = compile(runnerSource, componentName, userId);
         final var listener = new TestRunListener();
         final TestExecutionResult r = run(testClass, listener);
 
-        clientResultDto.setTestClassName("DebugRunner");
-        clientResultDto.setTestStatus(r.getStatus());
-        clientResultDto.setTestDetails(listener.getMap());
-        clientResultDto.setElapsedTime(listener.getTestSuiteElapsedTime());
-        clientResultDto.setCoverage(iTracker.getCoverageForUser(userId));
-        clientResultDto.setVariables(iTracker.getVarsForUser(userId));
-        clientResultDto.setLogs(iTracker.getLogsForUser(userId));
-        clientResultDto.setDebugTrace(iTracker.getDebugTraceForUser(userId));
-        clientResultDto.setCoveredLines(mapMap(iTracker.getCoveredLinesForUser(userId), (k, v) -> v.size()));
-        clientResultDto.setTotalLines(mapMap(iTracker.getLinesForUser(userId), (k, v) -> v.size()));
-        
-        if (isDebugging(userId)) {
+        final var clientResultDto = new TestExecutionResultDTO();
+        populateResult(clientResultDto, testClass.getName(), r, listener, userId);
+
+        if (isDebugging()) {
             verifyDebugFix(componentName, userId, clientResultDto);
         }
         return clientResultDto;
     }
 
-    private boolean isDebugging(String userId) {
+    private boolean isDebugging() {
         return userGameProgressionRepository.findById(new UserKey(userService.requireCurrentUser()))
                 .map(ugp -> ugp.getStatus() == GameProgressStatus.DEBUGGING)
                 .orElse(false);
     }
     
+    // Run the hidden fallback tests; if they pass the bug is fixed, so publish a ComponentFixedEvent
     private void verifyDebugFix(String componentName, String userId, TestExecutionResultDTO clientResultDto) {
         try {
-            Class<?> fallbackTestClass = compileFallbackTests(componentName, userId);
-            var fallbackListener = new TestRunListener();
-            TestExecutionResult fallbackResult = run(fallbackTestClass, fallbackListener);
-            clientResultDto.setHiddenTestsPassed(fallbackResult.wasSuccessful());
-            if (fallbackResult.wasSuccessful()) {
+            var fallback = runHiddenTests(componentName, userId);
+            clientResultDto.setHiddenTestsPassed(fallback.result().wasSuccessful());
+            if (fallback.result().wasSuccessful()) {
                 eventService.publishAndHandleEvent(new ComponentFixedEvent(componentName));
             }
         } catch (Exception e) {
@@ -107,76 +94,81 @@ public class ExecutionService {
 
     public TestExecutionResultDTO execute(String componentName, String userId)
             throws ClassLoadException, NotFoundException, TestExecutionException, CompilationException {
-        final var iTracker = InstrumentationTracker.getInstance();
-        iTracker.clearForUser(userId);
+        InstrumentationTracker.getInstance().clearForUser(userId);
         final var clientResultDto = new TestExecutionResultDTO();
         final Class<?> testClass = compile(componentName, userId);
         final var listener = new TestRunListener();
         final TestExecutionResult r = run(testClass, listener);
 
-        boolean isDebugging = userGameProgressionRepository.findById(new UserKey(userService.requireCurrentUser())).orElseThrow().getStatus() == GameProgressStatus.DEBUGGING;
-        if (r.wasSuccessful() && isDebugging) { // tests passed while in debug mode: check if really fixed
-            Class<?> fallbackTestClass = compileFallbackTests(componentName, userId);
-            var fallbackListener = new TestRunListener();
-            TestExecutionResult fallbackResult = run(fallbackTestClass, fallbackListener);
-            if (fallbackResult.wasSuccessful()) {
+        if (r.wasSuccessful() && isDebugging()) { // tests passed while in debug mode: check if really fixed
+            var fallback = runHiddenTests(componentName, userId);
+            if (fallback.result().wasSuccessful()) {
                 clientResultDto.setHiddenTestsPassed(true);
                 eventService.publishAndHandleEvent(new ComponentFixedEvent(componentName));
             } else {
                 clientResultDto.setHiddenTestsPassed(false);
-                // TODO: add all failing methods or only one?
-                for (Map.Entry<String, TestDetailsDTO> entry : fallbackListener.getMap().entrySet()) {
-                    String methodName = entry.getKey();
-                    TestDetailsDTO testDetails = entry.getValue();
-                    if (testDetails.getTestStatus() == FAILED) {
-                        testService.addHiddenTestMethodToUserTest(methodName, componentName, userId);
-                        eventService.publishEvent(new ComponentTestsExtendedEvent(componentName, methodName));
-                        // execute tests again.
-                        // (Now the user tests will fail, so the hidden tests aren't executed again)
-                        return execute(componentName, userId);
-                    }
+                var reexecuted = addFirstFailingHiddenTestAndReexecute(fallback.listener(), componentName, userId);
+                if (reexecuted != null) {
+                    return reexecuted;
                 }
             }
         }
 
-        // OutputWriter.writeShellOutput(iTracker.getClassTrackers());
-
-        clientResultDto.setTestClassName(testClass.getName());
-        clientResultDto.setTestStatus(r.getStatus());
-        clientResultDto.setTestDetails(listener.getMap());
-        clientResultDto.setElapsedTime(listener.getTestSuiteElapsedTime());
-        clientResultDto.setCoverage(iTracker.getCoverageForUser(userId));
-        clientResultDto.setVariables(iTracker.getVarsForUser(userId));
-        clientResultDto.setLogs(iTracker.getLogsForUser(userId));
-        clientResultDto.setDebugTrace(iTracker.getDebugTraceForUser(userId));
-        clientResultDto.setCoveredLines(mapMap(iTracker.getCoveredLinesForUser(userId), (k, v) -> v.size()));
-        clientResultDto.setTotalLines(mapMap(iTracker.getLinesForUser(userId), (k, v) -> v.size()));
+        populateResult(clientResultDto, testClass.getName(), r, listener, userId);
         return clientResultDto;
     }
 
     public TestExecutionResultDTO addFailingHiddenTest(String componentName, String userId)
             throws TestExecutionException, CompilationException, ClassLoadException, NotFoundException {
-        Class<?> fallbackTestClass = compileFallbackTests(componentName, userId);
-        var fallbackListener = new TestRunListener();
-        TestExecutionResult fallbackResult = run(fallbackTestClass, fallbackListener);
-        if (fallbackResult.wasSuccessful()) {
+        var fallback = runHiddenTests(componentName, userId);
+        if (fallback.result().wasSuccessful()) {
             throw new IllegalStateException("Hidden tests passed, so no failing test can be added.");
-        } else {
-            for (Map.Entry<String, TestDetailsDTO> entry : fallbackListener.getMap().entrySet()) {
-                String methodName = entry.getKey();
-                TestDetailsDTO testDetails = entry.getValue();
-                if (testDetails.getTestStatus() == FAILED) {
-                    testService.addHiddenTestMethodToUserTest(methodName, componentName, userId);
-                    eventService.publishEvent(new ComponentTestsExtendedEvent(componentName, methodName));
-                    // execute tests again.
-                    // (the user tests will fail, so the hidden tests aren't executed again)
-                    return execute(componentName, userId);
-                }
-            }
         }
-
+        var reexecuted = addFirstFailingHiddenTestAndReexecute(fallback.listener(), componentName, userId);
+        if (reexecuted != null) {
+            return reexecuted;
+        }
         throw new IllegalStateException("No failing test found in hidden tests.");
     }
+    
+    private FallbackRun runHiddenTests(String componentName, String userId)
+            throws NotFoundException, ClassLoadException, TestExecutionException, CompilationException {
+        Class<?> fallbackTestClass = compileFallbackTests(componentName, userId);
+        var listener = new TestRunListener();
+        var result = run(fallbackTestClass, listener);
+        return new FallbackRun(result, listener);
+    }
+    
+    private TestExecutionResultDTO addFirstFailingHiddenTestAndReexecute(
+            TestRunListener fallbackListener, String componentName, String userId)
+            throws ClassLoadException, NotFoundException, TestExecutionException, CompilationException {
+        for (var entry : fallbackListener.getMap().entrySet()) {
+            if (entry.getValue().getTestStatus() == FAILED) {
+                testService.addHiddenTestMethodToUserTest(entry.getKey(), componentName, userId);
+                eventService.publishEvent(new ComponentTestsExtendedEvent(componentName, entry.getKey()));
+                // re-run: the user tests now fail, so the hidden tests aren't executed again
+                return execute(componentName, userId);
+            }
+        }
+        return null;
+    }
+    
+    private void populateResult(TestExecutionResultDTO dto, String testClassName,
+                                TestExecutionResult result, TestRunListener listener, String userId) {
+        final var iTracker = InstrumentationTracker.getInstance();
+        dto.setTestClassName(testClassName);
+        dto.setTestStatus(result.getStatus());
+        dto.setTestDetails(listener.getMap());
+        dto.setElapsedTime(listener.getTestSuiteElapsedTime());
+        dto.setCoverage(iTracker.getCoverageForUser(userId));
+        dto.setVariables(iTracker.getVarsForUser(userId));
+        dto.setLogs(iTracker.getLogsForUser(userId));
+        dto.setDebugTrace(iTracker.getDebugTraceForUser(userId));
+        dto.setCoveredLines(mapMap(iTracker.getCoveredLinesForUser(userId), (k, v) -> v.size()));
+        dto.setTotalLines(mapMap(iTracker.getLinesForUser(userId), (k, v) -> v.size()));
+    }
+    
+    private record FallbackRun(TestExecutionResult result, TestRunListener listener) {}
 
     /**
      * Fetches the CUT and the test class of a user for the specified component from the database and compiles them.

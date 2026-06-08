@@ -174,6 +174,7 @@ function renderCoverage(coverage) {
     _applyCoverageDecorations();
 }
 
+// Coverage restricted to the CUT lines reached up to the current debug step
 function _revealedCoverage() {
     const cutClassId = window.cutClassName + '#' + window.userId;
     const full = _lastCoverage?.[cutClassId] ?? {};
@@ -189,6 +190,7 @@ function _revealedCoverage() {
     return {[cutClassId]: result};
 }
 
+// (Re)draw coverage line decorations in the class editor, honoring the toggle and step reveal
 function _applyCoverageDecorations() {
     const model = window.editors.monaco.debug.getModel();
     if (!model) return;
@@ -304,6 +306,7 @@ let _debugStepIndex = 0;
 const _breakpoints = {debug: new Set(), test: new Set()};
 const _bpDecorations = {debug: [], test: []};
 
+// Add/remove a breakpoint on a line and redraw the gutter markers
 function _toggleBreakpoint(editorKey, lineNumber) {
     const editor = window.editors.monaco[editorKey];
     if (!editor) return;
@@ -316,6 +319,7 @@ function _toggleBreakpoint(editorKey, lineNumber) {
     _renderBreakpointDecorations(editorKey);
 }
 
+// Redraw all breakpoint glyphs for one editor
 function _renderBreakpointDecorations(editorKey) {
     const editor = window.editors.monaco[editorKey];
     if (!editor) return;
@@ -330,6 +334,7 @@ function _renderBreakpointDecorations(editorKey) {
     _bpDecorations[editorKey] = editor.deltaDecorations(_bpDecorations[editorKey], newDecos);
 }
 
+// Wire gutter clicks in both editors to breakpoint toggling
 function _attachBreakpointHandlers() {
     const M = monaco.editor.MouseTargetType;
     const gutterTypes = new Set([
@@ -352,6 +357,7 @@ function _attachBreakpointHandlers() {
 
 _attachBreakpointHandlers();
 
+// Merge class + test steps in execution order and start the stepper
 function renderDebugTrace(debugTrace) {
     const cutClassId = window.cutClassName + '#' + window.userId;
     const testClassId = window.testClassName + '#' + window.userId;
@@ -369,12 +375,26 @@ function renderDebugTrace(debugTrace) {
         return;
     }
 
-    _debugRevealCoverage = true;
+    // Like IntelliJ: jump straight to the first breakpoint, or to the end if none is set.
+    _debugStepIndex = _firstBreakpointIndex();
+
     document.getElementById('bottom-panel').setAttribute('aria-hidden', 'false');
     switchTab('debugger');
     _renderCurrentStep();
 }
 
+/** @return {number} index of the first step sitting on a breakpoint, or the last step if none. */
+function _firstBreakpointIndex() {
+    if (!_debugSteps) return 0;
+    for (let i = 0; i < _debugSteps.length; i++) {
+        const s = _debugSteps[i];
+        const editorKey = s._source === 'test' ? 'test' : 'debug';
+        if (_breakpoints[editorKey].has(s.lineNumber)) return i;
+    }
+    return _debugSteps.length - 1;
+}
+
+// Render one variable row, recursing into a collapsible tree for compound values
 function _renderRow(name, node) {
     const label = `<span class="var-name">${_e(String(name))}</span><span class="var-eq">=</span>`;
     const preview = node?.preview ?? '';
@@ -392,6 +412,7 @@ function _renderRow(name, node) {
         `<span class="var-tree-spacer"></span>${label}<code class="var-val">${_e(preview)}</code></div>`;
 }
 
+// Render the current step: label, nav buttons, variables and line highlight
 function _renderCurrentStep() {
     if (!_debugSteps) return;
     const step = _debugSteps[_debugStepIndex];
@@ -428,6 +449,7 @@ function _renderCurrentStep() {
     if (_debugRevealCoverage) _applyCoverageDecorations();
 }
 
+// Turn the current-line highlight on (once) when the user starts stepping
 function _enableDebugHighlight() {
     if (!_debugHighlightOn) {
         _debugHighlightOn = true;
@@ -451,6 +473,7 @@ function debugStepNext() {
     }
 }
 
+// Jump to the next breakpoint; at the end switch to the results tab
 function debugContinue() {
     if (!_debugSteps) return;
     if (_debugStepIndex === _debugSteps.length - 1) {
@@ -475,6 +498,7 @@ function debugContinue() {
 
 const _currentLineDecors = {debug: [], test: []};
 
+// Highlight the active line in the relevant editor and clear the other
 function _highlightDebugLine(lineNumber, source) {
     const effectiveLine = (_debugHighlightOn && lineNumber) ? lineNumber : null;
     ['debug', 'test'].forEach(key => {
@@ -497,6 +521,7 @@ function _highlightDebugLine(lineNumber, source) {
     }
 }
 
+// Reset the stepper UI to its empty "no trace" state
 function _hideStepper() {
     _debugRevealCoverage = false;
     _applyCoverageDecorations();
@@ -531,6 +556,7 @@ document.addEventListener('keydown', ev => {
 
 let _coverageHighlightOn = true;
 
+// Toggle the coverage line highlighting on/off
 function toggleCoverageHighlight() {
     _coverageHighlightOn = !_coverageHighlightOn;
     document.getElementById('toggle-coverage-btn').classList.toggle('is-on', _coverageHighlightOn);
@@ -539,6 +565,7 @@ function toggleCoverageHighlight() {
 
 let _debugHighlightOn = true;
 
+// Toggle the current-line debug highlighting on/off
 function toggleDebugHighlight() {
     _debugHighlightOn = !_debugHighlightOn;
     document.getElementById('toggle-debug-btn').classList.toggle('is-on', _debugHighlightOn);
@@ -546,11 +573,14 @@ function toggleDebugHighlight() {
     else _highlightDebugLine(null);
 }
 
+// Switch the bottom-panel tab and reveal step-limited coverage only on the debugger tab
 function switchTab(name) {
     ['debugger', 'results'].forEach(t => {
         document.getElementById(`tab-btn-${t}`).classList.toggle('active', t === name);
         document.getElementById(`tab-pane-${t}`).setAttribute('aria-hidden', t === name ? 'false' : 'true');
     });
+    _debugRevealCoverage = name === 'debugger';
+    _applyCoverageDecorations();
 }
 
 
@@ -566,11 +596,26 @@ const [encodeHtmlEntities, decodeHtmlEntities] = (() => {
 })();
 const [_e, _d] = [encodeHtmlEntities, decodeHtmlEntities]; // shorthand
 
-/** @param {TestResult} obj */
-function renderTestResultObject(obj) {
+/**
+ * Show or hide the "Debugger" tab in the bottom panel. The tab 
+ * only appears after an explicit Debug run.
+ * @param {boolean} visible
+ */
+function setDebuggerTabVisible(visible) {
+    const tabBtn = document.getElementById('tab-btn-debugger');
+    tabBtn.style.display = visible ? '' : 'none';
+    if (!visible && tabBtn.classList.contains('active')) {
+        switchTab('results');
+    }
+}
+
+/**
+ * @param {TestResult} obj
+ * @param {boolean} showDebugTrace
+ */
+function renderTestResultObject(obj, showDebugTrace = false) {
     renderCoverage(obj.coverage);
     renderLogs(obj.logs);
-    renderDebugTrace(obj.debugTrace);
 
     let r = `<strong>${obj.testClassName} </strong>`;
 
@@ -619,6 +664,15 @@ function renderTestResultObject(obj) {
     }
     r += '</ul>';
     renderResult(r + `<br><small>Elapsed time: ${obj.elapsedTime} ms</small>`);
+
+    // The debugger tab only shows up for an explicit Debug run.
+    if (showDebugTrace) {
+        setDebuggerTabVisible(true);
+        renderDebugTrace(obj.debugTrace);
+    } else {
+        _hideStepper();
+        setDebuggerTabVisible(false);
+    }
 }
 
 
@@ -653,15 +707,22 @@ function closeEditor() {
 document.getElementById('editor-close-btn').addEventListener('click', closeEditor);
 
 const execBtn = document.getElementById('editor-execute-btn');
-const execute = async () => {
+const debugBtn = document.getElementById('editor-debug-btn');
+
+function setExecuteDisabled(disabled) {
+    execBtn.disabled = disabled;
+    debugBtn.disabled = disabled;
+}
+
+const execute = async (debug = false) => {
     const componentName = currentComponent;
     if (!componentName) {
         renderResult(`<p class="clr-error">There is no component loaded currently.</p>`);
         return;
     }
     const code = window.editors.monaco.test.getValue();
-    renderResult('<p>Executing test...</p>');
-    execBtn.disabled = true;
+    renderResult(debug ? '<p>Debugging test...</p>' : '<p>Executing test...</p>');
+    setExecuteDisabled(true);
 
     if (gameProgress?.status === 'DEBUGGING') {
         await save(componentName); // save CUT
@@ -679,7 +740,7 @@ const execute = async () => {
 
         res.json().then(/** @param {TestResult} obj */obj => {
             console.log(obj);
-            execBtn.disabled = false;
+            setExecuteDisabled(false);
 
             if (!res.ok) {
                 renderResult(`
@@ -703,7 +764,7 @@ const execute = async () => {
                 minimum: minLineCoverage,
             }
 
-            renderTestResultObject(obj);
+            renderTestResultObject(obj, debug);
             renderCoveragePercentage(lineCoverageNumbers);
             updateActivateButtonState(data);
 
@@ -728,11 +789,12 @@ const execute = async () => {
     })
         .catch(e => {
             console.error(e);
-            execBtn.disabled = false;
+            setExecuteDisabled(false);
             renderResult(`<p class="clr-error"><strong>Failed to execute test due to network issues.</strong></p>`);
         });
 }
-execBtn.addEventListener('click', execute);
+execBtn.addEventListener('click', () => execute(false));
+debugBtn.addEventListener('click', () => execute(true));
 
 function updateResetButtonState(componentName) {
     const resetCutButton = document.getElementById('editor-reset-cut-btn');
@@ -851,7 +913,7 @@ async function activateTests() {
     window.es.sendEvent(event);
     const data = await getComponentData(componentName);
 
-    execBtn.disabled = true;
+    setExecuteDisabled(true);
     updateActivateButtonState(data);
     renderResult(`<p>Test activated for ${componentName}.</p>`);
     constrain([], 'test');
@@ -862,8 +924,9 @@ async function activateTests() {
 document.getElementById('editor-activate-test-btn').addEventListener('click', activateTests);
 
 
+// Unity calls this (via the jslib) to enter the debug strand; reuses the normal editor opener
 window.openDebugger = function (componentName) {
-    window.open(`/debug?component=${encodeURIComponent(componentName)}`, '_blank');
+    return window.openEditor(componentName);
 };
 
 window.openEditor = async function (componentName) {
@@ -878,12 +941,13 @@ window.openEditor = async function (componentName) {
 
     const activateButton = document.getElementById('editor-activate-test-btn');
     const resetCutButton = document.getElementById('editor-reset-cut-btn');
-    execBtn.disabled = true;
+    setExecuteDisabled(true);
     activateButton.disabled = true;
     resetCutButton.disabled = true;
     constrain([], 'debug');
     constrain([], 'test');
 
+    setDebuggerTabVisible(false); // hide debugger tab until an explicit Debug run
     renderResult('');
     renderCoveragePercentage(null);
     currentComponent = componentName;
@@ -915,7 +979,7 @@ window.openEditor = async function (componentName) {
     updateActivateButtonState(currentComponentData);
     updateResetButtonState(componentName);
     if (gameProgress?.status !== 'TESTS_ACTIVE') {
-        execBtn.disabled = false;
+        setExecuteDisabled(false);
     }
 
     if (gameProgress?.status === 'MUTATED' || gameProgress?.status === 'DESTROYED') {
