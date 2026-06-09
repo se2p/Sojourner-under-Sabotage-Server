@@ -10,7 +10,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 public interface GameProgressionRepository extends
-        JpaRepository<GameProgressionEntity, Long>,
+        JpaRepository<GameProgressionEntity, Integer>,
         JpaSpecificationExecutor<GameProgressionEntity> {
 
     @Query("SELECT gp FROM GameProgressionEntity gp WHERE gp.mode = :mode ORDER BY gp.orderIndex LIMIT 1")
