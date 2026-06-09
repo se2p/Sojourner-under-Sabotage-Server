@@ -14,7 +14,8 @@ const RUNNER_LINE_OFFSET = RUNNER_HEADER.split('\n').length - 1; // → 6
 const RUNNER_FOOTER = `    }\n}\n`;
 
 function wrapRunnerCode(body) {
-    return RUNNER_HEADER + body + RUNNER_FOOTER;
+    // Force a newline before the footer so a body ending in a // comment can't swallow the closing brace
+    return RUNNER_HEADER + body + '\n' + RUNNER_FOOTER;
 }
 
 function runnerDisplayLine(serverLine) {
