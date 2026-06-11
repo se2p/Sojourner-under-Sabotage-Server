@@ -1,5 +1,6 @@
 package de.tim_greller.susserver.service.game;
 
+import java.util.Collection;
 import java.util.Optional;
 
 import de.tim_greller.susserver.dto.CutSourceDTO;
@@ -25,6 +26,7 @@ import de.tim_greller.susserver.persistence.repository.PatchRepository;
 import de.tim_greller.susserver.persistence.repository.UserRepository;
 import de.tim_greller.susserver.service.auth.UserService;
 import de.tim_greller.susserver.service.execution.CutService;
+import de.tim_greller.susserver.service.execution.DebugMainService;
 import de.tim_greller.susserver.service.execution.ExecutionService;
 import de.tim_greller.susserver.service.execution.TestService;
 import lombok.RequiredArgsConstructor;
@@ -48,6 +50,7 @@ public class ComponentStatusService {
     private final ComponentStatusRepository componentStatusRepository;
     private final ComponentRepository componentRepository;
     private final CutService cutService;
+    private final DebugMainService debugMainService;
 
 
     @Transactional
@@ -176,10 +179,12 @@ public class ComponentStatusService {
     }
 
     // TODO: Long term this method should only be called on new game creation.
+    // Only resets the given components so resetting one strand keeps the other strand's progress.
     @Transactional
-    public void resetComponentStatus(String userId) {
-        componentStatusRepository.deleteAllByUserComponentKeyUserUsername(userId);
-        activePatchRepository.deleteAllByComponentKeyUserUsername(userId);
-        testService.resetTestsForUser(userId);
+    public void resetComponentStatus(String userId, Collection<String> componentNames) {
+        componentStatusRepository.deleteAllByUserAndComponents(userId, componentNames);
+        activePatchRepository.deleteAllByUserAndComponents(userId, componentNames);
+        testService.resetTestsForUser(userId, componentNames);
+        debugMainService.resetRunnersForUser(userId, componentNames);
     }
 }

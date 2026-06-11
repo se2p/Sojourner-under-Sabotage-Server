@@ -1,6 +1,6 @@
 package de.tim_greller.susserver.persistence.entity;
 
-import de.tim_greller.susserver.persistence.keys.ComponentStageKey;
+import de.tim_greller.susserver.persistence.keys.UserComponentKey;
 import jakarta.persistence.Column;
 import jakarta.persistence.EmbeddedId;
 import jakarta.persistence.Entity;
@@ -15,10 +15,10 @@ import lombok.Setter;
 @Getter
 @AllArgsConstructor
 @NoArgsConstructor
-public class DebugMainEntity {
+public class UserDebugMainEntity {
 
     @EmbeddedId
-    ComponentStageKey componentStageKey;
+    private UserComponentKey userComponentKey;
 
     @Column(length = 100_000)
     @Setter

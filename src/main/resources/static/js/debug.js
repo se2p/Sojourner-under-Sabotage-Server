@@ -179,13 +179,20 @@ function handleExecutionResult(obj, showDebug = false) {
         _hideStepper();
         setDebuggerTabVisible(false);
     }
+    
+    let hidden = obj.hiddenTestsPassed
+        ? '<p class="clr-success">Hidden tests passed ✓</p>'
+        : '<p class="clr-error">Hidden tests failed ✗</p>';
+    if (obj.hiddenTestsError) {
+        hidden += `<pre class="clr-error">${_e(obj.hiddenTestsError)}</pre>`;
+    }
 
     if (obj.testStatus === 'PASSED') {
-        renderStatus('');
+        renderStatus(hidden);
         return;
     }
 
-    let r = '';
+    let r = hidden;
     for (const details of Object.values(obj.testDetails)) {
         if (details.trace) {
             r += `<span class="clr-error">Exception:</span><pre class="clr-error">${_e(details.trace)}</pre>`;

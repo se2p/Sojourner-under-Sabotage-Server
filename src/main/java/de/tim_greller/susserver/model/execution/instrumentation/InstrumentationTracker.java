@@ -16,6 +16,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.TreeMap;
+import java.util.TreeSet;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -181,16 +182,18 @@ public class InstrumentationTracker {
                 .trackEnterTestMethod(pTestMethodName);
     }
 
+    // The getters below copy the trackers' collections: the returned snapshots must not
+    // change when a later run (e.g. the hidden fallback tests) keeps writing to the trackers.
     public Map<String, Map<Integer, Integer>> getCoverage() {
-        return mapMap(classTrackers, (className, classTracker) -> classTracker.getVisitedLines());
+        return mapMap(classTrackers, (className, classTracker) -> new TreeMap<>(classTracker.getVisitedLines()));
     }
 
     public Map<String, Set<Integer>> getLines() {
-        return mapMap(classTrackers, (className, classTracker) -> classTracker.getLines());
+        return mapMap(classTrackers, (className, classTracker) -> new HashSet<>(classTracker.getLines()));
     }
 
     public Map<String, Set<Integer>> getCoveredLines() {
-        return mapMap(classTrackers, (className, classTracker) -> classTracker.getVisitedLines().keySet());
+        return mapMap(classTrackers, (className, classTracker) -> new TreeSet<>(classTracker.getVisitedLines().keySet()));
     }
 
     public Map<String, Map<Integer, Map<String, String>>> getVars() {
@@ -202,7 +205,7 @@ public class InstrumentationTracker {
     }
 
     public Map<String, List<LogEntry>> getLogs() {
-        return mapMap(classTrackers, (className, classTracker) -> classTracker.getLogs());
+        return mapMap(classTrackers, (className, classTracker) -> new ArrayList<>(classTracker.getLogs()));
     }
 
     public Map<String, Map<Integer, Integer>> getCoverageForUser(String userId) {
@@ -226,7 +229,7 @@ public class InstrumentationTracker {
     }
 
     public Map<String, List<DebugStep>> getDebugTrace() {
-        return mapMap(classTrackers, (className, classTracker) -> classTracker.getDebugTrace());
+        return mapMap(classTrackers, (className, classTracker) -> new ArrayList<>(classTracker.getDebugTrace()));
     }
 
     public Map<String, List<DebugStep>> getDebugTraceForUser(String userId) {

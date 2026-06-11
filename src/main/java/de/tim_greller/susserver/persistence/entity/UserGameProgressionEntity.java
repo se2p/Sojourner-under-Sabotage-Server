@@ -5,11 +5,9 @@ import static jakarta.persistence.FetchType.EAGER;
 
 import de.tim_greller.susserver.dto.GameMode;
 import de.tim_greller.susserver.dto.GameProgressStatus;
-import de.tim_greller.susserver.persistence.keys.UserKey;
+import de.tim_greller.susserver.persistence.keys.UserModeKey;
 import jakarta.persistence.EmbeddedId;
 import jakarta.persistence.Entity;
-import jakarta.persistence.EnumType;
-import jakarta.persistence.Enumerated;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 import lombok.AllArgsConstructor;
@@ -28,16 +26,16 @@ import lombok.Setter;
 public class UserGameProgressionEntity {
 
     @EmbeddedId
-    private UserKey user;
+    private UserModeKey id;
 
     @ManyToOne(fetch = EAGER)
     private GameProgressionEntity gameProgression;
 
     @Builder.Default
-    private GameProgressStatus status = TALK; // Talk as default cause first room got no door
+    private GameProgressStatus status = TALK;
 
-    @Enumerated(EnumType.STRING)
-    @Builder.Default
-    private GameMode mode = GameMode.Testing;
+    public GameMode getMode() {
+        return id.getMode();
+    }
 
 }

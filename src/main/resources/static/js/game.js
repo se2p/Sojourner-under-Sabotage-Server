@@ -31,12 +31,42 @@ window.editors.monaco.test = monaco.editor.create(monacoContainerTest, {
     glyphMargin: true,
 });
 
+const RUNNER_HEADER =
+`import java.util.*;
+
+public class DebugRunner {
+
+    @org.junit.jupiter.api.Test
+    void run() throws Exception {
+`;
+const RUNNER_LINE_OFFSET = RUNNER_HEADER.split('\n').length - 1;
+const RUNNER_FOOTER = `    }\n}\n`;
+
+function isDebugStrand() {
+    return gameProgress?.mode === 'Debugging';
+}
+
+// Wrap the runner body into the full DebugRunner class the server executes.
+function wrapRunnerCode(body) {
+    return RUNNER_HEADER + body + '\n' + RUNNER_FOOTER;
+}
+
+function makeRunnerTemplate(className) {
+    return `// Call ${className} methods here — runs top to bottom:\n${className} obj = new ${className}(/* args */);\n`;
+}
+
+// Load the stored runner body for a component; null when none exists (caller falls back to the template).
+async function loadRunner(componentName) {
+    const res = await fetch(`${apiUrl}/components/${componentName}/debug/main`, {headers: authHeader});
+    return res.ok ? (await res.json()).code : null;
+}
+
 // top right buttons: add confirm dialogue to anchors
 document.getElementById('reset-game-button').addEventListener('click', ev => {
     ev.preventDefault();
     Popup.instance.open('reset').addButton(
         'Reset',
-        () => window.location.replace('/reset'),
+        () => window.location.replace(isDebugStrand() ? '/reset-debug' : '/reset'),
         ['clr-error']
     );
 });
@@ -66,6 +96,10 @@ function renderResult(content) {
     editors.monaco.test.layout();
     editors.monaco.debug.layout();
     editorContainers.forEach(el => el.style.height = 'initial');
+    requestAnimationFrame(() => {
+        editors.monaco.test.layout();
+        editors.monaco.debug.layout();
+    });
 }
 
 function sessionExpired(statusInfo) {
@@ -85,8 +119,8 @@ async function save(componentName = currentComponent) {
     statusInfo.innerText = "Saving...";
     const data = componentData.get(componentName);
 
-    // 1 ─ Save test
-    if (gameProgress?.status === 'TEST' || gameProgress?.status === 'DEBUGGING') {
+    // 1 ─ Save test (skipped in the debug strand)
+    if (!isDebugStrand() && (gameProgress?.status === 'TEST' || gameProgress?.status === 'DEBUGGING')) {
         const test = window.editors.monaco.test.getValue();
         await fetch(`${apiUrl}/components/${componentName}/test/src`, {
             method: 'PUT',
@@ -105,6 +139,25 @@ async function save(componentName = currentComponent) {
 
         // 1.2 ─ Update in local cache
         data.test.sourceCode = test;
+    }
+
+    // 1b ─ Save runner (debug strand only; the right editor holds the runner body)
+    if (isDebugStrand()) {
+        const runner = window.editors.monaco.test.getValue();
+        await fetch(`${apiUrl}/components/${componentName}/debug/main`, {
+            method: 'PUT',
+            headers: jsonHeader,
+            body: JSON.stringify({code: runner}),
+        }).then(res => {
+            if (res.status === 401) {
+                sessionExpired(statusInfo);
+                return;
+            }
+            noSaveFailure &= res.ok;
+        }).catch(e => {
+            console.error(e);
+            noSaveFailure = false;
+        });
     }
 
     // 2 ─ Save cut (only in debug mode, after a component was mutated)
@@ -174,18 +227,41 @@ function renderCoverage(coverage) {
     _applyCoverageDecorations();
 }
 
+// Incremental cache for _revealedCoverage: visit counts of the CUT lines covered by
+// steps[0.._reachedCache.upTo]. Counts (not a set) so stepping backwards over one visit
+// keeps lines that are still reached by an earlier step.
+let _reachedCache = null;
+
 // Coverage restricted to the CUT lines reached up to the current debug step
 function _revealedCoverage() {
     const cutClassId = window.cutClassName + '#' + window.userId;
     const full = _lastCoverage?.[cutClassId] ?? {};
-    const reached = new Set();
-    for (let i = 0; _debugSteps && i <= _debugStepIndex && i < _debugSteps.length; i++) {
-        const s = _debugSteps[i];
-        if (s._source !== 'test') reached.add(s.lineNumber); // only CUT lines carry coverage
+    if (!_debugSteps) return {[cutClassId]: {}};
+
+    if (_reachedCache?.steps !== _debugSteps) { // new trace loaded
+        _reachedCache = {steps: _debugSteps, upTo: -1, counts: new Map()};
     }
+    const c = _reachedCache;
+    while (c.upTo < _debugStepIndex) {
+        c.upTo++;
+        const s = _debugSteps[c.upTo];
+        if (s._source !== 'test') { // only CUT lines carry coverage
+            c.counts.set(s.lineNumber, (c.counts.get(s.lineNumber) ?? 0) + 1);
+        }
+    }
+    while (c.upTo > _debugStepIndex) {
+        const s = _debugSteps[c.upTo];
+        if (s._source !== 'test') {
+            const n = c.counts.get(s.lineNumber) - 1;
+            if (n === 0) c.counts.delete(s.lineNumber);
+            else c.counts.set(s.lineNumber, n);
+        }
+        c.upTo--;
+    }
+
     const result = {};
     for (const [line, count] of Object.entries(full)) {
-        if (reached.has(parseInt(line))) result[line] = count;
+        if (c.counts.has(parseInt(line))) result[line] = count;
     }
     return {[cutClassId]: result};
 }
@@ -233,42 +309,6 @@ function renderCoveragePercentage(data) {
         );
     }
     window.objectiveDisplay.hide();
-}
-
-/**
- * @param {Object<string, Object<number, Object<string, string>>>} variables
- */
-function renderDebugValues(variables) {
-    const cutClassId = window.cutClassName + '#' + window.userId;
-    const data = variables?.[cutClassId] ?? {};
-    const hints = [];
-    for (const [line, vars] of Object.entries(data)) {
-        let sep = '//';
-        for (const [varName, value] of Object.entries(vars)) {
-            const shortName = varName.split('/').pop();
-            hints.push({
-                kind: monaco.languages.InlayHintKind.Type,
-                position: {column: Number.MAX_VALUE, lineNumber: parseInt(line)},
-                label: `${sep} ${shortName} = ${value}`,
-                paddingLeft: true,
-                tooltip: `The variable ${shortName} is assigned to the value "${value}" here.`,
-            });
-            sep = ',';
-        }
-    }
-
-    if (window.disposeHints) window.disposeHints.dispose();
-    window.disposeHints = monaco.languages.registerInlayHintsProvider("java", {
-        provideInlayHints(model, range, token) {
-            const dispose = () => {
-            };
-            if (model === window.editors.monaco.debug.getModel()) {
-                return {hints, dispose};
-            } else {
-                return {hints: [], dispose};
-            }
-        },
-    });
 }
 
 /**
@@ -383,13 +423,21 @@ function renderDebugTrace(debugTrace) {
     _renderCurrentStep();
 }
 
+// The line shown in its editor for a step. In the debug strand the runner body
+// (right editor) is offset by the wrapper header the server prepends before running.
+function _stepDisplayLine(step) {
+    return (isDebugStrand() && step._source === 'test')
+        ? step.lineNumber - RUNNER_LINE_OFFSET
+        : step.lineNumber;
+}
+
 /** @return {number} index of the first step sitting on a breakpoint, or the last step if none. */
 function _firstBreakpointIndex() {
     if (!_debugSteps) return 0;
     for (let i = 0; i < _debugSteps.length; i++) {
         const s = _debugSteps[i];
         const editorKey = s._source === 'test' ? 'test' : 'debug';
-        if (_breakpoints[editorKey].has(s.lineNumber)) return i;
+        if (_breakpoints[editorKey].has(_stepDisplayLine(s))) return i;
     }
     return _debugSteps.length - 1;
 }
@@ -418,13 +466,13 @@ function _renderCurrentStep() {
     const step = _debugSteps[_debugStepIndex];
     const isCut = step._source !== 'test';
     const badgeCls = isCut ? 'cut' : 'test';
-    const badgeText = isCut ? 'Class' : 'Test';
+    const badgeText = isCut ? 'Class' : (isDebugStrand() ? 'Runner' : 'Test');
 
     const labelEl = document.getElementById('debug-step-label');
     labelEl.innerHTML =
         `<span class="debug-source-badge ${badgeCls}">${_e(badgeText)}</span>` +
         `Step ${_debugStepIndex + 1}&thinsp;/&thinsp;${_debugSteps.length}` +
-        `&ensp;&middot;&ensp;Line ${step.lineNumber}` +
+        `&ensp;&middot;&ensp;Line ${_stepDisplayLine(step)}` +
         `&ensp;&middot;&ensp;${_e(step.methodName)}`;
 
     const atEnd = _debugStepIndex === _debugSteps.length - 1;
@@ -445,7 +493,7 @@ function _renderCurrentStep() {
         container.innerHTML = entries.map(([k, v]) => _renderRow(k, v)).join('');
     }
 
-    _highlightDebugLine(step.lineNumber, step._source);
+    _highlightDebugLine(_stepDisplayLine(step), step._source);
     if (_debugRevealCoverage) _applyCoverageDecorations();
 }
 
@@ -484,7 +532,7 @@ function debugContinue() {
     for (let i = _debugStepIndex + 1; i < _debugSteps.length; i++) {
         const s = _debugSteps[i];
         const editorKey = s._source === 'test' ? 'test' : 'debug';
-        if (_breakpoints[editorKey].has(s.lineNumber)) {
+        if (_breakpoints[editorKey].has(_stepDisplayLine(s))) {
             _debugStepIndex = i;
             _renderCurrentStep();
             return;
@@ -500,7 +548,7 @@ const _currentLineDecors = {debug: [], test: []};
 
 // Highlight the active line in the relevant editor and clear the other
 function _highlightDebugLine(lineNumber, source) {
-    const effectiveLine = (_debugHighlightOn && lineNumber) ? lineNumber : null;
+    const effectiveLine = (_debugHighlightOn && lineNumber > 0) ? lineNumber : null;
     ['debug', 'test'].forEach(key => {
         const editor = window.editors.monaco[key];
         if (!editor) return;
@@ -515,7 +563,7 @@ function _highlightDebugLine(lineNumber, source) {
         }] : [];
         _currentLineDecors[key] = editor.deltaDecorations(_currentLineDecors[key], decos);
     });
-    if (lineNumber) {
+    if (lineNumber > 0) {
         const activeKey = source === 'test' ? 'test' : 'debug';
         window.editors.monaco[activeKey]?.revealLineInCenter(lineNumber);
     }
@@ -540,6 +588,7 @@ function _hideStepper() {
 
 document.addEventListener('keydown', ev => {
     if (!_debugSteps) return;
+    if (ev.target instanceof Element && ev.target.closest('.monaco-editor')) return;
     if (ev.key === 'ArrowLeft') {
         ev.preventDefault();
         debugStepPrev();
@@ -680,17 +729,11 @@ window.editors.monaco.test.onDidChangeModelContent(onContentChangedTests);
 window.editors.monaco.debug.onDidChangeModelContent(onContentChangedCut);
 
 function onContentChangedTests() {
-    // hide variable value hints, as they can get confusing while editing
-    if (window.disposeHints) window.disposeHints.dispose();
-
     // disable activate button, because the tests need to be executed again
     disableActivateButton();
 }
 
 function onContentChangedCut() {
-    // hide variable value hints, as they can get confusing while editing
-    if (window.disposeHints) window.disposeHints.dispose();
-
     // reset button might be useful now
     updateResetButtonState(currentComponent);
 }
@@ -720,6 +763,11 @@ const execute = async (debug = false) => {
         renderResult(`<p class="clr-error">There is no component loaded currently.</p>`);
         return;
     }
+    
+    if (isDebugStrand()) {
+        return executeRunner(componentName, debug);
+    }
+
     const code = window.editors.monaco.test.getValue();
     renderResult(debug ? '<p>Debugging test...</p>' : '<p>Executing test...</p>');
     setExecuteDisabled(true);
@@ -796,6 +844,74 @@ const execute = async (debug = false) => {
 execBtn.addEventListener('click', () => execute(false));
 debugBtn.addEventListener('click', () => execute(true));
 
+async function executeRunner(componentName, debug = false) {
+    renderResult(debug ? '<p>Debugging...</p>' : '<p>Running...</p>');
+    setExecuteDisabled(true);
+
+    await save(componentName); // persists the CUT edits before running
+
+    const code = wrapRunnerCode(window.editors.monaco.test.getValue());
+
+    try {
+        const res = await fetch(`${apiUrl}/components/${componentName}/debug/execute`, {
+            method: 'POST',
+            headers: jsonHeader,
+            body: JSON.stringify({code}),
+        });
+        setExecuteDisabled(false);
+
+        if (res.status === 401) {
+            renderResult(`<p class="clr-error">Your session has expired. <a href="/login">Login again.</a></p>`);
+            return;
+        }
+        if (!res.ok) {
+            const err = await res.json().catch(() => ({message: 'Unknown error'}));
+            renderResult(`<p class="clr-error"><strong>Execution failed.</strong></p>
+                          <pre class="clr-error">${_e(err.message ?? '')}</pre>`);
+            return;
+        }
+
+        const obj = await res.json();
+        console.log('Debug execution result:', obj);
+        renderDebugRunResult(obj, debug);
+    } catch (e) {
+        console.error(e);
+        setExecuteDisabled(false);
+        renderResult(`<p class="clr-error"><strong>Failed to run due to network issues.</strong></p>`);
+    }
+}
+
+function renderDebugRunResult(obj, showDebug = false) {
+    renderLogs(obj.logs);
+
+    let r = obj.hiddenTestsPassed
+        ? '<p class="clr-success">Hidden tests passed ✓</p>'
+        : '<p class="clr-error">Hidden tests failed ✗</p>';
+    if (obj.hiddenTestsError) {
+        r += `<pre class="clr-error">${_e(obj.hiddenTestsError)}</pre>`;
+    }
+
+    if (obj.testStatus !== 'PASSED') {
+        for (const details of Object.values(obj.testDetails ?? {})) {
+            if (details.trace) {
+                r += `<span class="clr-error">Exception:</span><pre class="clr-error">${_e(details.trace)}</pre>`;
+            } else if (details.accessDenied) {
+                r += `<span class="clr-error">Access denied: ${_e(details.accessDenied)}</span>`;
+            } else if (details.testStatus !== 'PASSED') {
+                r += `<span class="clr-error">Run failed (${_e(details.testStatus)})</span>`;
+            }
+        }
+    }
+    renderResult(r);
+    if (showDebug) {
+        setDebuggerTabVisible(true);
+        renderDebugTrace(obj.debugTrace);
+    } else {
+        _hideStepper();
+        setDebuggerTabVisible(false);
+    }
+}
+
 function updateResetButtonState(componentName) {
     const resetCutButton = document.getElementById('editor-reset-cut-btn');
     resetCutButton.style.display = gameProgress?.status === 'DEBUGGING' ? 'block' : 'none';
@@ -805,7 +921,7 @@ function updateResetButtonState(componentName) {
 async function resetCut() {
     const componentName = currentComponent;
     if (!componentName) return;
-    const currentComponentData = await getComponentData(componentName);
+    const currentComponentData = await getComponentData(componentName, true, !isDebugStrand());
     const resetCutButton = document.getElementById('editor-reset-cut-btn');
 
     Popup.instance.open('reset cut').addButton('Reset', () => {
@@ -832,9 +948,10 @@ document.getElementById('editor-reset-cut-btn').addEventListener('click', resetC
 /**
  * @param {string} componentName
  * @param {boolean} useCache
+ * @param {boolean} includeTest Whether to fetch the test as well
  * @return {Promise<ComponentData>}
  */
-async function getComponentData(componentName, useCache = true) {
+async function getComponentData(componentName, useCache = true, includeTest = true) {
     let data = {};
     const onError = res => {
         Popup.instance.open('error').onClose(closeEditor);
@@ -857,7 +974,7 @@ async function getComponentData(componentName, useCache = true) {
         }).catch(onError);
     }
 
-    if (!data.test || !useCache) {
+    if (includeTest && (!data.test || !useCache)) {
         await fetch(`${apiUrl}/components/${componentName}/test/src`, {headers: authHeader}).then(res => {
             if (!res.ok) {
                 onError(res);
@@ -946,6 +1063,10 @@ window.openEditor = async function (componentName) {
     resetCutButton.disabled = true;
     constrain([], 'debug');
     constrain([], 'test');
+    
+    const debugging = gameProgress?.mode === 'Debugging';
+    uiOverlay.classList.toggle('mode-debugging', debugging);
+    uiOverlay.classList.toggle('mode-testing', !debugging);
 
     setDebuggerTabVisible(false); // hide debugger tab until an explicit Debug run
     renderResult('');
@@ -957,20 +1078,31 @@ window.openEditor = async function (componentName) {
     window.editors.monaco.test.layout();
     uiOverlay.setAttribute('aria-hidden', 'false');
 
-    // do not use cache here to get a fresh set of editableRanges
-    const currentComponentData = await getComponentData(componentName, false);
+    // Start the runner fetch in parallel with the CUT fetch (debug strand only)
+    const runnerPromise = debugging ? loadRunner(componentName) : null;
+    // do not use cache here to get a fresh set of editableRanges; the debug strand has no test source
+    const currentComponentData = await getComponentData(componentName, false, !debugging);
 
     window.editors.monaco.debug.setValue(currentComponentData.cut.sourceCode);
-    const isMutated = ['MUTATED', 'DESTROYED', 'DEBUGGING'].includes(gameProgress?.status);
+    const isMutated = debugging || ['MUTATED', 'DESTROYED', 'DEBUGGING'].includes(gameProgress?.status);
     // make it not editable if not attacked/mutated.
     constrain(isMutated ? currentComponentData.cut.editable : [], 'debug');
     monacoContainerDebug.classList.toggle('mutated', isMutated);
     monacoContainerTest.classList.toggle('highlight', !isMutated);
     window.cutClassName = currentComponentData.cut.className;
 
-    window.editors.monaco.test.setValue(currentComponentData.test.sourceCode);
-    constrain(currentComponentData.test.editable, 'test');
-    window.testClassName = currentComponentData.test.className;
+    if (debugging) {
+        // Right editor is the free-form runner that drives the class under debug.
+        const runnerCode = (await runnerPromise) ?? makeRunnerTemplate(currentComponentData.cut.className);
+        window.editors.monaco.test.setValue(runnerCode);
+        window.testClassName = 'DebugRunner';
+        // fully editable: drop any leftover constraints from a prior testing session
+        window.editors.restricted.test?.removeRestrictionsIn(window.editors.monaco.test.getModel());
+    } else {
+        window.editors.monaco.test.setValue(currentComponentData.test.sourceCode);
+        constrain(currentComponentData.test.editable, 'test');
+        window.testClassName = currentComponentData.test.className;
+    }
 
     if (currentComponentData.testResult) {
         renderTestResultObject(currentComponentData.testResult);
@@ -1039,8 +1171,8 @@ es.registerHandler(
             if (gameProgress.status === "DEBUGGING") {
                 Popup.instance.open('test extended', evt);
             }
-
-                if (currentComponent === evt.componentName) {
+            
+                if (!isDebugStrand() && currentComponent === evt.componentName) {
                     window.editors.monaco.test.setValue(test.sourceCode);
                     constrain(test.editable, 'test');
                 }

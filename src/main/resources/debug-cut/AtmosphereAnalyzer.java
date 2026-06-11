@@ -13,7 +13,7 @@ public class AtmosphereAnalyzer {
     }
 
     public double calibrate(double normalized) {
-        return normalized + calibrationOffset;
+        return normalized - calibrationOffset;
     }
 
     public double toPercent(double calibrated) {

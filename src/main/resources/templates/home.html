@@ -1,5 +1,6 @@
 <!DOCTYPE html>
-<html xmlns="http://www.w3.org/1999/xhtml" xmlns:th="https://www.thymeleaf.org" lang="en">
+<html xmlns="http://www.w3.org/1999/xhtml" xmlns:th="https://www.thymeleaf.org"
+      xmlns:sec="http://www.thymeleaf.org/extras/spring-security" lang="en">
 <head>
     <title>Sojourner under Sabotage ─ A Testing and Debugging Game</title>
     <meta name="description" content="Sojourner under Sabotage is a serious game that lets you practice software testing and debugging.">
@@ -18,6 +19,9 @@
     <meta name="theme-color" content="#000000">
 </head>
 <body>
+<nav class="auth-corner" sec:authorize="isAuthenticated()">
+    <a th:href="@{/logout}" class="button">Log out</a>
+</nav>
 <main>
     <div class="teaser">
         <div th:if="${param.logout}" class="logout">
@@ -26,15 +30,20 @@
         <h1>Sojourner under<br><span class="orange">Sabotage</span></h1>
         <img th:src="@{/images/sus-teaser.png}" alt="Sojourner under Sabotage" draggable="false" />
         <div class="strand-cards">
+            <!-- Game buttons require a login; Continue is only shown (as primary button) when a savestate exists. -->
             <div class="strand-card">
                 <h2 class="strand-name">Testing</h2>
-                <a th:href="@{/reset}" class="button">New game</a>
-                <a th:href="@{/game}" class="btn-small">Continue</a>
+                <a sec:authorize="isAnonymous()" th:href="@{/login}" class="button">Log in to play</a>
+                <a th:if="${hasTestingSave}" th:href="@{/game}" class="button">Continue</a>
+                <a sec:authorize="isAuthenticated()" th:href="@{/reset}"
+                   th:class="${hasTestingSave} ? 'btn-small' : 'button'" class="button">New game</a>
             </div>
             <div class="strand-card">
                 <h2 class="strand-name">Debugging</h2>
-                <a th:href="@{/reset-debug}" class="button">New game</a>
-                <a th:href="@{/debug}" class="btn-small">Open editor</a>
+                <a sec:authorize="isAnonymous()" th:href="@{/login}" class="button">Log in to play</a>
+                <a th:if="${hasDebuggingSave}" th:href="@{/game(mode='Debugging')}" class="button">Continue</a>
+                <a sec:authorize="isAuthenticated()" th:href="@{/reset-debug}"
+                   th:class="${hasDebuggingSave} ? 'btn-small' : 'button'" class="button">New game</a>
             </div>
         </div>
     </div>

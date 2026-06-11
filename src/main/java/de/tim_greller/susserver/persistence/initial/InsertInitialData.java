@@ -76,9 +76,6 @@ public class InsertInitialData implements CommandLineRunner {
     @Value("${debugMainPattern:classpath:debug-main/stage-*/*.java}")
     private String debugMainPattern;
 
-    @Value("${debugMutantPattern:classpath:debug-mutants/stage-*/*.java}")
-    private String debugMutantPattern;
-
     @Value("${debugProgressionCSV:classpath:game/debug-progression.csv}")
     private String debugProgressionCSV;
 
@@ -86,23 +83,22 @@ public class InsertInitialData implements CommandLineRunner {
     @Override
     public void run(String... args) throws Exception {
         if (initData) {
-            readAndSaveCuts();
-            readAndSaveFallbackTests();
+            readAndSaveCuts(cutPattern);
+            readAndSaveFallbackTests(fallbackTestPattern);
             readAndSaveGameProgression(gameProgressionCSV, GameMode.Testing);
 
-            readAndSaveDebugCuts();
-            readAndSaveDebugTests();
+            readAndSaveCuts(debugCutPattern);
+            readAndSaveFallbackTests(debugTestPattern);
             readAndSaveDebugMains();
             readAndSaveGameProgression(debugProgressionCSV, GameMode.Debugging);
 
             readAndSavePatches();
-            readAndSaveDebugPatches();
         }
     }
 
-    private void readAndSaveCuts() throws IOException {
+    private void readAndSaveCuts(String pattern) throws IOException {
         ResourcePatternResolver resolver = ResourcePatternUtils.getResourcePatternResolver(resourceLoader);
-        for (Resource resource : resolver.getResources(cutPattern)) {
+        for (Resource resource : resolver.getResources(pattern)) {
             // component name = name of file
             var name = getComponentName(resource);
             var content = resource.getContentAsString(UTF_8);
@@ -116,9 +112,9 @@ public class InsertInitialData implements CommandLineRunner {
         }
     }
 
-    private void readAndSaveFallbackTests() throws IOException {
+    private void readAndSaveFallbackTests(String pattern) throws IOException {
         ResourcePatternResolver resolver = ResourcePatternUtils.getResourcePatternResolver(resourceLoader);
-        for (Resource resource : resolver.getResources(fallbackTestPattern)) {
+        for (Resource resource : resolver.getResources(pattern)) {
             var stage = getStageNumber(resource);
             // component name = name of file without -Test.java
             var name = Objects.requireNonNull(resource.getFilename()).split("Test\\.java")[0];
@@ -134,37 +130,17 @@ public class InsertInitialData implements CommandLineRunner {
 
     /**
      * Reads all patches from the classpath and saves them to the database.
-     * Requires {@link InsertInitialData#readAndSaveCuts()} to be called first, so all CUTs are available.
+     * Requires {@link InsertInitialData#readAndSaveCuts(String)} to be called first, so all CUTs are available.
      */
     private void readAndSavePatches() throws IOException {
-        readPatchesFromPattern(mutantPattern);
-    }
-
-    // Load the debug strand's classes-under-test from debug-cut/ and store them as CUTs
-    private void readAndSaveDebugCuts() throws IOException {
         ResourcePatternResolver resolver = ResourcePatternUtils.getResourcePatternResolver(resourceLoader);
-        for (Resource resource : resolver.getResources(debugCutPattern)) {
-            var name = getComponentName(resource);
-            var content = resource.getContentAsString(UTF_8);
-            var className = extractClassName(content);
-            assert !className.isEmpty();
-            var component = componentRepository.getOrCreate(name);
-            cutRepository.save(new CutEntity(new ComponentKey(component), className, content));
-        }
-    }
-
-    //todo: refactor duplicate lines
-    // Load the debug strand's hidden fallback tests from debug-test/
-    private void readAndSaveDebugTests() throws IOException {
-        ResourcePatternResolver resolver = ResourcePatternUtils.getResourcePatternResolver(resourceLoader);
-        for (Resource resource : resolver.getResources(debugTestPattern)) {
-            var stage = getStageNumber(resource);
-            var name = Objects.requireNonNull(resource.getFilename()).split("Test\\.java")[0];
-            var content = resource.getContentAsString(UTF_8);
-            var className = extractClassName(content);
-            assert !className.isEmpty();
-            var componentKey = new ComponentStageKey(componentRepository.getOrCreate(name), stage);
-            fallbackTestRepository.save(new FallbackTestEntity(componentKey, className, content));
+        for (Resource resource : resolver.getResources(mutantPattern)) {
+            var mutatedSourceCode = resource.getContentAsString(UTF_8);
+            var component = componentRepository.getOrCreate(getComponentName(resource));
+            var cut = cutRepository.findById(new ComponentKey(component)).orElseThrow();
+            var patch = patchService.createPatch(cut.getSourceCode(), mutatedSourceCode);
+            var mutant = new PatchEntity(patch, new ComponentStageKey(component, getStageNumber(resource)));
+            patchRepository.save(mutant);
         }
     }
 
@@ -176,23 +152,7 @@ public class InsertInitialData implements CommandLineRunner {
             var name = getComponentName(resource);
             var content = resource.getContentAsString(UTF_8);
             var componentKey = new ComponentStageKey(componentRepository.getOrCreate(name), stage);
-            debugMainRepository.save(new DebugMainEntity(componentKey, name, content));
-        }
-    }
-
-    private void readAndSaveDebugPatches() throws IOException {
-        readPatchesFromPattern(debugMutantPattern);
-    }
-
-    private void readPatchesFromPattern(String pattern) throws IOException {
-        ResourcePatternResolver resolver = ResourcePatternUtils.getResourcePatternResolver(resourceLoader);
-        for (Resource resource : resolver.getResources(pattern)) {
-            var mutatedSourceCode = resource.getContentAsString(UTF_8);
-            var component = componentRepository.getOrCreate(getComponentName(resource));
-            var cut = cutRepository.findById(new ComponentKey(component)).orElseThrow();
-            var patch = patchService.createPatch(cut.getSourceCode(), mutatedSourceCode);
-            var mutant = new PatchEntity(patch, new ComponentStageKey(component, getStageNumber(resource)));
-            patchRepository.save(mutant);
+            debugMainRepository.save(new DebugMainEntity(componentKey, content));
         }
     }
 

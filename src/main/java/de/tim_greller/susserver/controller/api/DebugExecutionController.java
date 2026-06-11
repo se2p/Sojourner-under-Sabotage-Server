@@ -6,17 +6,16 @@ import de.tim_greller.susserver.exception.ClassLoadException;
 import de.tim_greller.susserver.exception.CompilationException;
 import de.tim_greller.susserver.exception.NotFoundException;
 import de.tim_greller.susserver.exception.TestExecutionException;
-import de.tim_greller.susserver.persistence.entity.DebugMainEntity;
-import de.tim_greller.susserver.persistence.repository.DebugMainRepository;
 import de.tim_greller.susserver.service.auth.UserService;
+import de.tim_greller.susserver.service.execution.DebugMainService;
 import de.tim_greller.susserver.service.execution.ExecutionService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseBody;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
@@ -27,7 +26,7 @@ public class DebugExecutionController {
 
     private final UserService userService;
     private final ExecutionService executionService;
-    private final DebugMainRepository debugMainRepository;
+    private final DebugMainService debugMainService;
 
     // Run debug runner and return the result including the debug trace
     @PostMapping(value = "${paths.api}/components/{componentName}/debug/execute")
@@ -47,16 +46,28 @@ public class DebugExecutionController {
         }
     }
 
-    // Return the debug main source for a component and stage
+    // Return the debug runner for a component: the user's saved edits if present,
+    // otherwise the shared template for the user's current stage.
     @GetMapping(value = "${paths.api}/components/{componentName}/debug/main")
-    public @ResponseBody PlainSource getDebugMain(
-            @PathVariable String componentName,
-            @RequestParam(defaultValue = "1") int stage) {
-        DebugMainEntity entity = debugMainRepository.findByKey(componentName, stage)
+    public @ResponseBody PlainSource getDebugMain(@PathVariable String componentName) {
+        String sourceCode = debugMainService
+                .getRunnerForUser(componentName, userService.requireCurrentUserId())
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
-                        "No debug main found for " + componentName + " stage " + stage));
+                        "No debug main found for " + componentName));
         PlainSource result = new PlainSource();
-        result.setCode(entity.getSourceCode());
+        result.setCode(sourceCode);
         return result;
+    }
+
+    // Persist the user's runner edits for a component.
+    @PutMapping(value = "${paths.api}/components/{componentName}/debug/main")
+    public void updateDebugMain(
+            @PathVariable String componentName,
+            @RequestBody PlainSource newSource) {
+        debugMainService.saveRunnerForUser(
+                componentName,
+                userService.requireCurrentUserId(),
+                newSource.getCode()
+        );
     }
 }

@@ -24,6 +24,8 @@ public class TestExecutionResultDTO {
     private Map<String, Map<Integer, Map<String, String>>> variables;
     private Map<String, List<LogEntry>> logs;
     private boolean hiddenTestsPassed = false;
+    // Set when the hidden tests could not run at all (compile error / timeout caused by the user's code)
+    private String hiddenTestsError;
     private Map<String, List<DebugStep>> debugTrace;
 
 }

@@ -19,6 +19,10 @@
     opacity: 0;
 }
 
+#ui-overlay.mode-debugging #editor-activate-test-btn {
+    display: none;
+}
+
 #button-bar {
     padding-block: 1.5rem;
     display: flex;
@@ -51,7 +55,6 @@
     display: flex;
     flex-direction: column;
     min-height: 100%;
-    /*No max-height, temp?*/
     padding: 3rem;
     box-sizing: border-box;
 }

@@ -1,5 +1,6 @@
 package de.tim_greller.susserver.service.execution;
 
+import java.util.Collection;
 import java.util.Optional;
 
 import de.tim_greller.susserver.dto.Range;
@@ -64,7 +65,10 @@ public class TestService {
 
     public TestSourceDTO getHiddenTestForComponent(ComponentStatusEntity componentStatus) {
         final String componentName = componentStatus.getUserComponentKey().getComponent().getName();
-        final int stage = componentStatus.getStage();
+        return getHiddenTestForComponent(componentName, componentStatus.getStage());
+    }
+
+    public TestSourceDTO getHiddenTestForComponent(String componentName, int stage) {
         final FallbackTestEntity fallbackTest = fallbackTestRepository.findByKey(componentName, stage).orElseThrow();
         return TestSourceDTO.fromFallbackTestEntity(fallbackTest);
     }
@@ -197,7 +201,7 @@ public class TestService {
         updateTestForComponent(componentName, userId, newSourceCode);
     }
 
-    public void resetTestsForUser(String userId) {
-        testRepository.deleteAllByUserComponentKeyUserUsername(userId);
+    public void resetTestsForUser(String userId, Collection<String> componentNames) {
+        testRepository.deleteAllByUserAndComponents(userId, componentNames);
     }
 }

@@ -130,7 +130,7 @@ public class SecurityConfig {
                     )
                     .formLogin((form) -> form
                             .loginPage("/login")
-                            .defaultSuccessUrl("/game")
+                            .defaultSuccessUrl("/")
                             .permitAll()
                     )
                     .logout(logoutConfig -> logoutConfig

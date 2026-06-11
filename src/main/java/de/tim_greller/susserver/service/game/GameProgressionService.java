@@ -30,7 +30,7 @@ import de.tim_greller.susserver.events.RoomUnlockedEvent;
 import de.tim_greller.susserver.persistence.entity.GameProgressionEntity;
 import de.tim_greller.susserver.persistence.entity.UserEntity;
 import de.tim_greller.susserver.persistence.entity.UserGameProgressionEntity;
-import de.tim_greller.susserver.persistence.keys.UserKey;
+import de.tim_greller.susserver.persistence.keys.UserModeKey;
 import de.tim_greller.susserver.persistence.repository.GameProgressionRepository;
 import de.tim_greller.susserver.persistence.repository.UserGameProgressionRepository;
 import de.tim_greller.susserver.persistence.repository.UserModifiedCutRepository;
@@ -50,6 +50,7 @@ public class GameProgressionService {
     private final EventService eventService;
     private final UserSettingsService userSettingsService;
     private final UserModifiedCutRepository userModifiedCutRepository;
+    private final ActiveGameModeService activeModeService;
 
 
     // Instantiated by the Spring IoC container during startup even if not injected anywhere.
@@ -57,7 +58,9 @@ public class GameProgressionService {
     GameProgressionService(EventService eventService, UserGameProgressionRepository userGameProgressionRepository,
                            GameProgressionRepository gameProgressionRepository,
                            ComponentStatusService componentStatusService, UserRepository userRepository,
-                           UserService userService, UserSettingsService userSettingsService, UserModifiedCutRepository userModifiedCutRepository) {
+                           UserService userService, UserSettingsService userSettingsService,
+                           UserModifiedCutRepository userModifiedCutRepository,
+                           ActiveGameModeService activeModeService) {
         this.userGameProgressionRepository = userGameProgressionRepository;
         this.gameProgressionRepository = gameProgressionRepository;
         this.componentStatusService = componentStatusService;
@@ -65,6 +68,7 @@ public class GameProgressionService {
         this.eventService = eventService;
         this.userSettingsService = userSettingsService;
         this.userModifiedCutRepository = userModifiedCutRepository;
+        this.activeModeService = activeModeService;
 
         eventService.registerHandler(GameStartedEvent.class, this::handleGameStarted);
         eventService.registerHandler(RoomUnlockedEvent.class, this::handleRoomUnlocked);
@@ -78,7 +82,7 @@ public class GameProgressionService {
     }
 
     public void handleComponentTestsActivated(ComponentTestsActivatedEvent event) {
-        UserGameProgressionEntity userGameProgression = userGameProgressionRepository.findById(currentUser()).orElseThrow();
+        UserGameProgressionEntity userGameProgression = userGameProgressionRepository.findById(currentUserModeKey()).orElseThrow();
         if (userGameProgression.getStatus() != TEST) {
             log.warn("Received ComponentTestsActivatedEvent while not in TEST state.");
             return;
@@ -87,18 +91,19 @@ public class GameProgressionService {
             userGameProgression.setStatus(TESTS_ACTIVE);
             userGameProgressionRepository.save(userGameProgression);
             changeGameProgression(userGameProgression);
-            gameLoop();
+            gameLoop(userGameProgression);
         }
     }
 
     private void handleGameStarted(GameStartedEvent gameStartedEvent) {
         var gameProgression = userGameProgressionRepository
-                .findById(currentUser())
+                .findById(currentUserModeKey())
                 .orElseGet(() -> {
-                    var user = currentUser().getUser();
-                    System.out.println("handleGameStarted called for user without game progression. User=" + user.getUsername());
-                    initGameProgression(user);
-                    return userGameProgressionRepository.findById(currentUser()).orElseThrow();
+                    var user = userService.requireCurrentUser();
+                    var mode = activeModeService.getModeForCurrentUser();
+                    log.info("Game started for user {} without progression in mode {}, initializing.",
+                            user.getUsername(), mode);
+                    return initGameProgression(user, mode);
                 });
 
         // handle TESTS_ACTIVE state
@@ -111,8 +116,8 @@ public class GameProgressionService {
             userGameProgressionRepository.save(gameProgression);
             componentStatusService.attackCut(gameProgression.getGameProgression().getComponent().getName());
         } else {
-            // send initial game progression to the client (DOOR, TALK, TEST, PUZZLE, DEBUGGING)
-            changeGameProgression(userGameProgressionRepository.findById(currentUser()).orElseThrow());
+            // Re-fetch: gameLoop may have attacked the component and advanced the status meanwhile.
+            changeGameProgression(userGameProgressionRepository.findById(currentUserModeKey()).orElseThrow());
         }
     }
 
@@ -123,7 +128,7 @@ public class GameProgressionService {
     private void handleComponentFixed(ComponentFixedEvent componentFixedEvent) {
         log.info("handle componentFixedEvent: {}", componentFixedEvent);
 
-        var userProgress = userGameProgressionRepository.findById(currentUser()).orElseThrow();
+        var userProgress = userGameProgressionRepository.findById(currentUserModeKey()).orElseThrow();
         var progression = userProgress.getGameProgression();
 
         if (userProgress.getStatus() != DEBUGGING) {
@@ -158,7 +163,7 @@ public class GameProgressionService {
     }
 
     private void handleRoomUnlocked(RoomUnlockedEvent roomUnlockedEvent) {
-        var gameProgression = userGameProgressionRepository.findById(currentUser()).orElseThrow();
+        var gameProgression = userGameProgressionRepository.findById(currentUserModeKey()).orElseThrow();
         var roomIdMatches = gameProgression.getGameProgression().getRoomId() == roomUnlockedEvent.getRoomId();
         if (gameProgression.getStatus() == DOOR && roomIdMatches) {
             gameProgression.setStatus(TALK);
@@ -168,17 +173,16 @@ public class GameProgressionService {
     }
 
     private void handleConversationFinished(ConversationFinishedEvent conversationFinishedEvent) {
-        UserGameProgressionEntity userGameProgression = userGameProgressionRepository.findById(currentUser()).orElseThrow();
+        UserGameProgressionEntity userGameProgression = userGameProgressionRepository.findById(currentUserModeKey()).orElseThrow();
         if (userGameProgression.getStatus() == TALK) {
             userGameProgression.setStatus(isDebugging(userGameProgression) ? PUZZLE : TEST);
             userGameProgressionRepository.save(userGameProgression);
             changeGameProgression(userGameProgression);
         }
     }
-    
-    // Debug strand: advance from the concept puzzle into the actual debugging step
+
     private void handlePuzzleSolved(PuzzleSolvedEvent puzzleSolvedEvent) {
-        var gameProgression = userGameProgressionRepository.findById(currentUser()).orElseThrow();
+        var gameProgression = userGameProgressionRepository.findById(currentUserModeKey()).orElseThrow();
         if (isDebugging(gameProgression) && gameProgression.getStatus() == PUZZLE) {
             gameProgression.setStatus(DEBUGGING);
             userGameProgressionRepository.save(gameProgression);
@@ -187,7 +191,7 @@ public class GameProgressionService {
     }
 
     private void handleComponentMutated(String componentName, GameProgressStatus targetStatus) {
-        var gameProgression = userGameProgressionRepository.findById(currentUser()).orElseThrow();
+        var gameProgression = userGameProgressionRepository.findById(currentUserModeKey()).orElseThrow();
         var componentMatches = gameProgression.getGameProgression().getComponent().getName().equals(componentName);
         if (gameProgression.getStatus() == TESTS_ACTIVE && componentMatches) {
             gameProgression.setStatus(targetStatus);
@@ -205,7 +209,7 @@ public class GameProgressionService {
     }
 
     private void handleDebugStart(DebugStartEvent debugStartEvent) {
-        var gameProgression = userGameProgressionRepository.findById(currentUser()).orElseThrow();
+        var gameProgression = userGameProgressionRepository.findById(currentUserModeKey()).orElseThrow();
         var componentMatches = gameProgression.getGameProgression().getComponent().getName().equals(debugStartEvent.getComponentName());
         if (gameProgression.getStatus().readyForDebugging() && componentMatches) {
             gameProgression.setStatus(DEBUGGING);
@@ -214,8 +218,7 @@ public class GameProgressionService {
         }
     }
 
-    private void gameLoop() {
-        var gameProgression = userGameProgressionRepository.findById(currentUser()).orElseThrow();
+    private void gameLoop(UserGameProgressionEntity gameProgression) {
         if (gameProgression.getStatus() == TESTS_ACTIVE) {
             String componentName = gameProgression.getGameProgression().getComponent().getName();
             int waitDurationSeconds = gameProgression.getGameProgression().getDelaySeconds();
@@ -229,32 +232,24 @@ public class GameProgressionService {
             componentStatusService.attackCut(componentName);
         }
     }
-    public void resetGameProgression() {
-        resetGameProgression(GameMode.Testing);
-    }
 
-    // Restart the game from the first progression of the given strand (testing or debugging)
+    // Only resets the data of the given mode's components, so the other strand's progress is kept.
     public void resetGameProgression(GameMode mode) {
-        componentStatusService.resetComponentStatus(currentUser().getUser().getUsername());
-        var gameProgression = UserGameProgressionEntity.builder()
-                .gameProgression(firstProgressionOf(mode))
-                .status(TALK)
-                .mode(mode)
-                .user(currentUser())
-                .build();
-        userGameProgressionRepository.save(gameProgression);
-        userModifiedCutRepository.deleteByUserId(currentUser().getUser().getUsername());
+        var userId = userService.requireCurrentUserId();
+        var componentNames = gameProgressionRepository.findComponentNamesByMode(mode);
+        componentStatusService.resetComponentStatus(userId, componentNames);
+        initGameProgression(userService.requireCurrentUser(), mode);
+        userModifiedCutRepository.deleteAllByUserAndComponents(userId, componentNames);
         userSettingsService.resetUserSettings();
     }
 
-    public void initGameProgression(UserEntity user) {
+    public UserGameProgressionEntity initGameProgression(UserEntity user, GameMode mode) {
         var gameProgression = UserGameProgressionEntity.builder()
-                .gameProgression(firstProgressionOf(GameMode.Testing))
+                .gameProgression(firstProgressionOf(mode))
                 .status(TALK)
-                .mode(GameMode.Testing)
-                .user(new UserKey(user))
+                .id(new UserModeKey(user, mode))
                 .build();
-        userGameProgressionRepository.save(gameProgression);
+        return userGameProgressionRepository.save(gameProgression);
     }
 
     private GameProgressionEntity firstProgressionOf(GameMode mode) {
@@ -263,13 +258,20 @@ public class GameProgressionService {
     }
 
     public Optional<UserGameProgressionDTO> getCurrentGameProgression() {
-        return userGameProgressionRepository.findById(currentUser()).map(this::toDTO);
+        return userGameProgressionRepository.findById(currentUserModeKey()).map(this::toDTO);
     }
 
-    private UserKey currentUser() {
-        return new UserKey(userService.requireCurrentUser());
+    // Whether the current user has a saved game for the given mode. False for anonymous users.
+    public boolean hasSavedProgression(GameMode mode) {
+        return userService.getCurrentUserId()
+                .map(userId -> userGameProgressionRepository.existsByIdUserUsernameAndIdMode(userId, mode))
+                .orElse(false);
     }
-    
+
+    private UserModeKey currentUserModeKey() {
+        return activeModeService.currentUserModeKey();
+    }
+
     private static boolean isDebugging(UserGameProgressionEntity ugp) {
         return GameMode.Debugging.equals(ugp.getMode());
     }

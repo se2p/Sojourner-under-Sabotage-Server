@@ -1,5 +1,6 @@
 package de.tim_greller.susserver.persistence.repository;
 
+import java.util.List;
 import java.util.Optional;
 
 import de.tim_greller.susserver.dto.GameMode;
@@ -20,4 +21,7 @@ public interface GameProgressionRepository extends
             + "ORDER BY gp.orderIndex LIMIT 1")
     Optional<GameProgressionEntity> findNextProgression(@Param("mode") GameMode mode,
                                                         @Param("afterOrderIndex") int afterOrderIndex);
+
+    @Query("SELECT DISTINCT gp.component.name FROM GameProgressionEntity gp WHERE gp.mode = :mode")
+    List<String> findComponentNamesByMode(@Param("mode") GameMode mode);
 }
