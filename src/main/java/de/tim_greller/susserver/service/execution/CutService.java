@@ -1,5 +1,6 @@
 package de.tim_greller.susserver.service.execution;
 
+import java.util.Collection;
 import java.util.Objects;
 import java.util.Optional;
 
@@ -134,6 +135,10 @@ public class CutService {
 
     public void removeUserModification(String componentName) {
         userModifiedCutRepository.deleteByKey(componentName, userService.requireCurrentUserId());
+    }
+
+    public void resetCutsForUser(String userId, Collection<String> componentNames) {
+        userModifiedCutRepository.deleteAllByUserAndComponents(userId, componentNames);
     }
 
     private CutSourceDTO applyPatch(CutSourceDTO cut, Patch patch) {

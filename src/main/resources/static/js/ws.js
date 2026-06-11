@@ -72,6 +72,11 @@ class EventSystem {
       console.error("Received empty event", event);
       return;
     }
+    // Drop events of the other strand
+    if (event.mode && window.gameMode && event.mode !== window.gameMode) {
+      console.log(`Ignoring ${event.type} for strand ${event.mode}`);
+      return;
+    }
     const eventType = event.type.replace(/^(\.)/, '');
     if (this.handlers.has(eventType)) {
       this.handlers.get(eventType).forEach((handler) => handler(event));
@@ -118,6 +123,7 @@ class EventSystem {
       this.stompClient.publish({
         destination: '/app/events',
         body: JSON.stringify(event),
+        headers: window.gameMode ? {'game-mode': window.gameMode} : {},
         skipContentLengthHeader: true,
       });
     } else {

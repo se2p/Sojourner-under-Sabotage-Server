@@ -1,25 +1,10 @@
 window.authHeader = { 'Authorization': `Bearer ${window.token}`, ...window.csrfHeader };
 window.jsonHeader = { 'Content-Type': 'application/json', ...authHeader };
 
-const RUNNER_HEADER =
-`import java.util.*;
-
-public class DebugRunner {
-
-    @org.junit.jupiter.api.Test
-    void run() throws Exception {
-`;
-const RUNNER_LINE_OFFSET = RUNNER_HEADER.split('\n').length - 1; // → 6
-
-const RUNNER_FOOTER = `    }\n}\n`;
-
-function wrapRunnerCode(body) {
-    // Force a newline before the footer so a body ending in a // comment can't swallow the closing brace
-    return RUNNER_HEADER + body + '\n' + RUNNER_FOOTER;
-}
+let _runnerLineOffset = 0;
 
 function runnerDisplayLine(serverLine) {
-    return serverLine - RUNNER_LINE_OFFSET;
+    return serverLine - _runnerLineOffset;
 }
 
 window.editors = { monaco: {}, restricted: {} };
@@ -110,7 +95,7 @@ function setExecuteDisabled(disabled) {
     debugBtn.disabled = disabled;
 }
 
-// Save, send the wrapped runner to the server, and render the (optionally debug) result
+// Save, send the runner body to the server, and render the (optionally debug) result
 const execute = async (debug = false) => {
     if (!currentComponent) { renderStatus('<p class="clr-error">No component selected.</p>'); return; }
     renderStatus(debug ? '<p>Debugging…</p>' : '<p>Running…</p>');
@@ -118,7 +103,7 @@ const execute = async (debug = false) => {
 
     await saveCut();
 
-    const code = wrapRunnerCode(window.editors.monaco.runner.getValue());
+    const code = window.editors.monaco.runner.getValue(); // runner body; the server wraps it
 
     const res = await fetch(`${apiUrl}/components/${currentComponent}/debug/execute`, {
         method: 'POST',
@@ -171,6 +156,7 @@ function setDebuggerTabVisible(visible) {
  * @param {boolean} showDebug whether to reveal the debug trace / debugger tab
  */
 function handleExecutionResult(obj, showDebug = false) {
+    _runnerLineOffset = obj.runnerLineOffset ?? 0;
     renderLogs(obj.logs);
     if (showDebug) {
         setDebuggerTabVisible(true);

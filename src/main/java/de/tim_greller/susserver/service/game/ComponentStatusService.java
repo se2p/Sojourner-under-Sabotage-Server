@@ -186,5 +186,6 @@ public class ComponentStatusService {
         activePatchRepository.deleteAllByUserAndComponents(userId, componentNames);
         testService.resetTestsForUser(userId, componentNames);
         debugMainService.resetRunnersForUser(userId, componentNames);
+        cutService.resetCutsForUser(userId, componentNames);
     }
 }

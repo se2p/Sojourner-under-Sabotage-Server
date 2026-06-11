@@ -9,9 +9,11 @@ import java.util.Map;
 
 import de.tim_greller.susserver.events.Event;
 import de.tim_greller.susserver.service.auth.UserService;
+import de.tim_greller.susserver.service.game.ActiveGameModeService;
 import de.tim_greller.susserver.service.game.EventService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
+import org.springframework.messaging.handler.annotation.Header;
 import org.springframework.messaging.handler.annotation.MessageMapping;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Controller;
@@ -27,35 +29,49 @@ public class EventController {
 
     private final EventService eventService;
     private final UserService userService;
+    private final ActiveGameModeService activeModeService;
     private final SimpMessagingTemplate simpMessagingTemplate;
     private final Map<String, List<Event>> eventsByUser = new HashMap<>();
     private long lastGarbageCollect = System.currentTimeMillis();
 
     public EventController(EventService eventService, UserService userService,
+                           ActiveGameModeService activeModeService,
                            SimpMessagingTemplate simpMessagingTemplate) {
         this.eventService = eventService;
         this.userService = userService;
+        this.activeModeService = activeModeService;
         this.simpMessagingTemplate = simpMessagingTemplate;
 
         eventService.setEventPublisher(this::sendEventToClient);
     }
 
     @MessageMapping("/events")  // complete endpoint depends on configured application message handler prefix: /app/events
-    public void handleClientEvent(Event clientEvent, Principal principal) {
-        log.info("client event [{}], timestamp: {}, user: {}",
+    public void handleClientEvent(Event clientEvent, Principal principal,
+                                  @Header(name = "game-mode", required = false) String gameMode) {
+        log.info("client event [{}], timestamp: {}, user: {}, mode: {}",
                 clientEvent.getClass().getSimpleName(),
                 clientEvent.getTimestamp(),
-                principal.getName()
+                principal.getName(),
+                gameMode
         );
 
         // Spring security context is not available for STOMP messages
         userService.overridePrincipal(principal);
 
-        eventService.handleEvent(clientEvent);
+        // The sending page states which strand it plays; bind it for this message's handling
+        activeModeService.bindMode(gameMode);
+        try {
+            eventService.handleEvent(clientEvent);
+        } finally {
+            activeModeService.clearMode();
+        }
     }
 
     public void sendEventToClient(Event event) {
         final String username = userService.requireCurrentUserId();
+        if (event.getMode() == null) {
+            event.setMode(activeModeService.getModeForCurrentUser());
+        }
         simpMessagingTemplate.convertAndSendToUser(username, "/queue/events", event);
         log.info("sent {} to user {}", event.getClass().getSimpleName(), username);
         eventsByUser.computeIfAbsent(username, key -> new LinkedList<>()).add(event);

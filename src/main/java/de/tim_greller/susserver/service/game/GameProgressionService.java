@@ -33,7 +33,6 @@ import de.tim_greller.susserver.persistence.entity.UserGameProgressionEntity;
 import de.tim_greller.susserver.persistence.keys.UserModeKey;
 import de.tim_greller.susserver.persistence.repository.GameProgressionRepository;
 import de.tim_greller.susserver.persistence.repository.UserGameProgressionRepository;
-import de.tim_greller.susserver.persistence.repository.UserModifiedCutRepository;
 import de.tim_greller.susserver.persistence.repository.UserRepository;
 import de.tim_greller.susserver.service.auth.UserService;
 import lombok.extern.slf4j.Slf4j;
@@ -49,7 +48,6 @@ public class GameProgressionService {
     private final UserService userService;
     private final EventService eventService;
     private final UserSettingsService userSettingsService;
-    private final UserModifiedCutRepository userModifiedCutRepository;
     private final ActiveGameModeService activeModeService;
 
 
@@ -59,7 +57,6 @@ public class GameProgressionService {
                            GameProgressionRepository gameProgressionRepository,
                            ComponentStatusService componentStatusService, UserRepository userRepository,
                            UserService userService, UserSettingsService userSettingsService,
-                           UserModifiedCutRepository userModifiedCutRepository,
                            ActiveGameModeService activeModeService) {
         this.userGameProgressionRepository = userGameProgressionRepository;
         this.gameProgressionRepository = gameProgressionRepository;
@@ -67,7 +64,6 @@ public class GameProgressionService {
         this.userService = userService;
         this.eventService = eventService;
         this.userSettingsService = userSettingsService;
-        this.userModifiedCutRepository = userModifiedCutRepository;
         this.activeModeService = activeModeService;
 
         eventService.registerHandler(GameStartedEvent.class, this::handleGameStarted);
@@ -107,7 +103,7 @@ public class GameProgressionService {
                 });
 
         // handle TESTS_ACTIVE state
-        gameLoop();
+        gameLoop(gameProgression);
 
         // handle DESTROYED and MUTATED states
         if (isTesting(gameProgression) && List.of(DESTROYED, MUTATED, DEBUGGING).contains(gameProgression.getStatus())) {
@@ -128,16 +124,18 @@ public class GameProgressionService {
     private void handleComponentFixed(ComponentFixedEvent componentFixedEvent) {
         log.info("handle componentFixedEvent: {}", componentFixedEvent);
 
-        var userProgress = userGameProgressionRepository.findById(currentUserModeKey()).orElseThrow();
-        var progression = userProgress.getGameProgression();
-
-        if (userProgress.getStatus() != DEBUGGING) {
-            log.error("Received ComponentFixedEvent while not in DEBUGGING state.");
+        // The event is published on every passing verification run; it only advances the game while
+        // the progression is actually in the DEBUGGING phase
+        var userProgressOpt = userGameProgressionRepository.findById(currentUserModeKey());
+        if (userProgressOpt.isEmpty() || userProgressOpt.get().getStatus() != DEBUGGING) {
+            log.info("Ignoring ComponentFixedEvent outside the DEBUGGING phase.");
             return;
         }
+        var userProgress = userProgressOpt.get();
+        var progression = userProgress.getGameProgression();
 
         if (!Objects.equals(progression.getComponent().getName(), componentFixedEvent.getComponentName())) {
-            log.error("Received ComponentFixedEvent for wrong component.");
+            log.warn("Received ComponentFixedEvent for wrong component.");
             return;
         }
 
@@ -158,7 +156,7 @@ public class GameProgressionService {
         log.info("componentFixedEvent changed game progression to: {}", newProgression);
 
         // Set the component stage
-        componentStatusService.getComponentStatus(newProgression.getComponent().getName(), currentUser().getUser().getUsername())
+        componentStatusService.getComponentStatus(newProgression.getComponent().getName(), userService.requireCurrentUserId())
                 .setStage(newProgression.getStage());
     }
 
@@ -239,7 +237,6 @@ public class GameProgressionService {
         var componentNames = gameProgressionRepository.findComponentNamesByMode(mode);
         componentStatusService.resetComponentStatus(userId, componentNames);
         initGameProgression(userService.requireCurrentUser(), mode);
-        userModifiedCutRepository.deleteAllByUserAndComponents(userId, componentNames);
         userSettingsService.resetUserSettings();
     }
 

@@ -26,6 +26,7 @@ public class TestExecutionResultDTO {
     private boolean hiddenTestsPassed = false;
     // Set when the hidden tests could not run at all (compile error / timeout caused by the user's code)
     private String hiddenTestsError;
+    private int runnerLineOffset;
     private Map<String, List<DebugStep>> debugTrace;
 
 }

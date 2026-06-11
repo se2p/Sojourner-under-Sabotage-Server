@@ -1,5 +1,6 @@
 package de.tim_greller.susserver.controller.api;
 
+import de.tim_greller.susserver.dto.GameMode;
 import de.tim_greller.susserver.dto.PlainSource;
 import de.tim_greller.susserver.dto.TestExecutionResultDTO;
 import de.tim_greller.susserver.exception.ClassLoadException;
@@ -9,6 +10,7 @@ import de.tim_greller.susserver.exception.TestExecutionException;
 import de.tim_greller.susserver.service.auth.UserService;
 import de.tim_greller.susserver.service.execution.DebugMainService;
 import de.tim_greller.susserver.service.execution.ExecutionService;
+import de.tim_greller.susserver.service.game.ActiveGameModeService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -27,12 +29,17 @@ public class DebugExecutionController {
     private final UserService userService;
     private final ExecutionService executionService;
     private final DebugMainService debugMainService;
+    private final ActiveGameModeService activeModeService;
 
-    // Run debug runner and return the result including the debug trace
+    // Save and run the user's runner body (the server wraps it into the DebugRunner class)
+    // and return the result including the debug trace.
     @PostMapping(value = "${paths.api}/components/{componentName}/debug/execute")
     public @ResponseBody TestExecutionResultDTO executeDebugRunner(
             @PathVariable String componentName,
             @RequestBody PlainSource runnerSource) {
+        debugMainService.saveRunnerForUser(componentName, userService.requireCurrentUserId(), runnerSource.getCode());
+
+        activeModeService.bindMode(GameMode.Debugging);
         try {
             return executionService.executeDebugRunner(
                     componentName,
@@ -43,6 +50,8 @@ public class DebugExecutionController {
             throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, e.getMessage());
         } catch (NotFoundException e) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, e.getMessage());
+        } finally {
+            activeModeService.clearMode();
         }
     }
 

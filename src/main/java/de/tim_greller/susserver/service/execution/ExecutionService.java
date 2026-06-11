@@ -8,7 +8,6 @@ import static de.tim_greller.susserver.dto.TestStatus.FAILED;
 import static de.tim_greller.susserver.dto.TestStatus.PASSED;
 import static de.tim_greller.susserver.util.Utils.mapMap;
 
-import de.tim_greller.susserver.dto.GameProgressStatus;
 import de.tim_greller.susserver.dto.TestExecutionResultDTO;
 import de.tim_greller.susserver.dto.TestSourceDTO;
 import de.tim_greller.susserver.dto.TestStatus;
@@ -26,8 +25,6 @@ import de.tim_greller.susserver.model.execution.instrumentation.transformer.Cove
 import de.tim_greller.susserver.model.execution.instrumentation.transformer.TestClassTransformer;
 import de.tim_greller.susserver.persistence.entity.ComponentStatusEntity;
 import de.tim_greller.susserver.persistence.repository.ComponentStatusRepository;
-import de.tim_greller.susserver.persistence.repository.UserGameProgressionRepository;
-import de.tim_greller.susserver.service.game.ActiveGameModeService;
 import de.tim_greller.susserver.service.game.EventService;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
@@ -45,26 +42,38 @@ import org.springframework.stereotype.Service;
 public class ExecutionService {
 
     private static final int MAX_TEST_EXECUTION_TIME_SECONDS = 1;
+    
+    private static final String RUNNER_CLASS_NAME = "DebugRunner";
+    private static final String RUNNER_HEADER = "import java.util.*;\n"
+            + "\n"
+            + "public class " + RUNNER_CLASS_NAME + " {\n"
+            + "\n"
+            + "    @org.junit.jupiter.api.Test\n"
+            + "    void run() throws Exception {\n";
+    private static final String RUNNER_FOOTER = "    }\n}\n";
+    private static final int RUNNER_LINE_OFFSET = (int) RUNNER_HEADER.lines().count();
+
     private final CutService cutService;
     private final TestService testService;
     private final ComponentStatusRepository componentStatusRepository;
     private final EventService eventService;
-    private final UserGameProgressionRepository userGameProgressionRepository;
-    private final ActiveGameModeService activeModeService;
     @Value("${jarsToInclude}") private List<String> jarsToInclude;
 
 
-    // Compile and run the user's debug runner, then run the hidden tests to report whether the fix works
-    public TestExecutionResultDTO executeDebugRunner(String componentName, String userId, String runnerCode)
+    // Wrap the runner body, compile and run it, then run the hidden tests to report whether the fix works.
+    // The trailing newline before the footer prevents a body ending in a // comment from swallowing the brace.
+    public TestExecutionResultDTO executeDebugRunner(String componentName, String userId, String runnerBody)
             throws ClassLoadException, NotFoundException, TestExecutionException, CompilationException {
         InstrumentationTracker.getInstance().clearForUser(userId);
 
-        var runnerSource = new TestSourceDTO(componentName, "DebugRunner", runnerCode, List.of());
+        var runnerCode = RUNNER_HEADER + runnerBody + "\n" + RUNNER_FOOTER;
+        var runnerSource = new TestSourceDTO(componentName, RUNNER_CLASS_NAME, runnerCode, List.of());
         final Class<?> testClass = compile(runnerSource, componentName, userId);
         final var listener = new TestRunListener();
         final TestExecutionResult r = run(testClass, listener);
 
         final var clientResultDto = new TestExecutionResultDTO();
+        clientResultDto.setRunnerLineOffset(RUNNER_LINE_OFFSET);
         populateResult(clientResultDto, testClass.getName(), r, listener, userId);
 
         // Skip the second compile + hidden-suite run while the runner itself fails.
@@ -76,15 +85,9 @@ public class ExecutionService {
         return clientResultDto;
     }
 
-    private boolean isDebugging() {
-        return userGameProgressionRepository.findById(activeModeService.currentUserModeKey())
-                .map(ugp -> ugp.getStatus() == GameProgressStatus.DEBUGGING)
-                .orElse(false);
-    }
-    
-    // Run the hidden fallback tests and report whether they pass. Only when the player is actually
-    // in the debug strand does a passing run count as a fix and publish a ComponentFixedEvent;
-    // on the standalone debug page it just reports the result.
+    // Run the hidden fallback tests and report whether they pass. A passing run publishes a
+    // ComponentFixedEvent; whether that advances the game is decided by the handler's guard
+    // (no-op outside the DEBUGGING phase, e.g. for runs on the standalone debug page).
     // Player-caused failures (broken interface, endless loop) are reported via hiddenTestsError;
     // infrastructure errors and failures of the progression handler propagate to the controller.
     private void verifyDebugFix(String componentName, String userId, TestExecutionResultDTO clientResultDto)
@@ -106,12 +109,17 @@ public class ExecutionService {
             return;
         }
         clientResultDto.setHiddenTestsPassed(passed);
-        if (passed && isDebugging()) {
+        if (passed) {
             eventService.publishAndHandleEvent(new ComponentFixedEvent(componentName));
         }
     }
 
     public TestExecutionResultDTO execute(String componentName, String userId)
+            throws ClassLoadException, NotFoundException, TestExecutionException, CompilationException {
+        return execute(componentName, userId, false);
+    }
+    
+    public TestExecutionResultDTO execute(String componentName, String userId, boolean verifyFix)
             throws ClassLoadException, NotFoundException, TestExecutionException, CompilationException {
         InstrumentationTracker.getInstance().clearForUser(userId);
         final var clientResultDto = new TestExecutionResultDTO();
@@ -122,7 +130,7 @@ public class ExecutionService {
         // Snapshot the user's run before the hidden tests write into the same trackers.
         populateResult(clientResultDto, testClass.getName(), r, listener, userId);
 
-        if (r.wasSuccessful() && isDebugging()) { // tests passed while in debug mode: check if really fixed
+        if (r.wasSuccessful() && verifyFix) {
             var fallback = runHiddenTests(componentName, userId);
             if (fallback.result().wasSuccessful()) {
                 clientResultDto.setHiddenTestsPassed(true);

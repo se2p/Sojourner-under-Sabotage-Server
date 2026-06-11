@@ -146,6 +146,7 @@
         : /*[[${_csrf.token}]]*/ ''
       };
       window.apiUrl = /*[[${@environment.getProperty('paths.api')}]]*/ '/api';
+      window.gameMode = /*[[${gameMode}]]*/ 'Testing'; // strand this page plays; sent with every event (ws.js)
     </script>
     <script th:src="@{/js/ws.js}"></script>
     <script th:src="@{/js/popup.js}"></script>

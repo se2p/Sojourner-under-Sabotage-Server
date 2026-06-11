@@ -31,24 +31,10 @@ window.editors.monaco.test = monaco.editor.create(monacoContainerTest, {
     glyphMargin: true,
 });
 
-const RUNNER_HEADER =
-`import java.util.*;
-
-public class DebugRunner {
-
-    @org.junit.jupiter.api.Test
-    void run() throws Exception {
-`;
-const RUNNER_LINE_OFFSET = RUNNER_HEADER.split('\n').length - 1;
-const RUNNER_FOOTER = `    }\n}\n`;
+let _runnerLineOffset = 0;
 
 function isDebugStrand() {
     return gameProgress?.mode === 'Debugging';
-}
-
-// Wrap the runner body into the full DebugRunner class the server executes.
-function wrapRunnerCode(body) {
-    return RUNNER_HEADER + body + '\n' + RUNNER_FOOTER;
 }
 
 function makeRunnerTemplate(className) {
@@ -108,7 +94,7 @@ function sessionExpired(statusInfo) {
     statusInfo.innerText = "Save Failed";
 }
 
-async function save(componentName = currentComponent) {
+async function save(componentName = currentComponent, skipRunner = false) {
     if (!currentComponent || window.editors.monaco.test.getValue() === loadingText) {
         console.log('No component loaded, not saving')
         return;
@@ -141,8 +127,8 @@ async function save(componentName = currentComponent) {
         data.test.sourceCode = test;
     }
 
-    // 1b ─ Save runner (debug strand only; the right editor holds the runner body)
-    if (isDebugStrand()) {
+    // 1b ─ Save runner (debug strand only; skipped when /debug/execute persists it anyway)
+    if (isDebugStrand() && !skipRunner) {
         const runner = window.editors.monaco.test.getValue();
         await fetch(`${apiUrl}/components/${componentName}/debug/main`, {
             method: 'PUT',
@@ -427,7 +413,7 @@ function renderDebugTrace(debugTrace) {
 // (right editor) is offset by the wrapper header the server prepends before running.
 function _stepDisplayLine(step) {
     return (isDebugStrand() && step._source === 'test')
-        ? step.lineNumber - RUNNER_LINE_OFFSET
+        ? step.lineNumber - _runnerLineOffset
         : step.lineNumber;
 }
 
@@ -848,9 +834,9 @@ async function executeRunner(componentName, debug = false) {
     renderResult(debug ? '<p>Debugging...</p>' : '<p>Running...</p>');
     setExecuteDisabled(true);
 
-    await save(componentName); // persists the CUT edits before running
+    await save(componentName, true); // persists the CUT edits; the runner is saved by /debug/execute itself
 
-    const code = wrapRunnerCode(window.editors.monaco.test.getValue());
+    const code = window.editors.monaco.test.getValue();
 
     try {
         const res = await fetch(`${apiUrl}/components/${componentName}/debug/execute`, {
@@ -882,6 +868,7 @@ async function executeRunner(componentName, debug = false) {
 }
 
 function renderDebugRunResult(obj, showDebug = false) {
+    _runnerLineOffset = obj.runnerLineOffset ?? 0;
     renderLogs(obj.logs);
 
     let r = obj.hiddenTestsPassed
