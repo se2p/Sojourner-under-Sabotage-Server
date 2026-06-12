@@ -33,10 +33,13 @@ import de.tim_greller.susserver.persistence.entity.UserGameProgressionEntity;
 import de.tim_greller.susserver.persistence.keys.UserModeKey;
 import de.tim_greller.susserver.persistence.repository.GameProgressionRepository;
 import de.tim_greller.susserver.persistence.repository.UserGameProgressionRepository;
-import de.tim_greller.susserver.persistence.repository.UserRepository;
 import de.tim_greller.susserver.service.auth.UserService;
+import de.tim_greller.susserver.service.execution.CutService;
+import de.tim_greller.susserver.service.execution.DebugMainService;
+import de.tim_greller.susserver.service.execution.TestService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @Slf4j
@@ -45,6 +48,10 @@ public class GameProgressionService {
     private final UserGameProgressionRepository userGameProgressionRepository;
     private final GameProgressionRepository gameProgressionRepository;
     private final ComponentStatusService componentStatusService;
+    private final AttackService attackService;
+    private final TestService testService;
+    private final DebugMainService debugMainService;
+    private final CutService cutService;
     private final UserService userService;
     private final EventService eventService;
     private final UserSettingsService userSettingsService;
@@ -55,12 +62,17 @@ public class GameProgressionService {
     // It then registers itself as a handler for the ComponentTestsActivatedEvent.
     GameProgressionService(EventService eventService, UserGameProgressionRepository userGameProgressionRepository,
                            GameProgressionRepository gameProgressionRepository,
-                           ComponentStatusService componentStatusService, UserRepository userRepository,
+                           ComponentStatusService componentStatusService, AttackService attackService,
+                           TestService testService, DebugMainService debugMainService, CutService cutService,
                            UserService userService, UserSettingsService userSettingsService,
                            ActiveGameModeService activeModeService) {
         this.userGameProgressionRepository = userGameProgressionRepository;
         this.gameProgressionRepository = gameProgressionRepository;
         this.componentStatusService = componentStatusService;
+        this.attackService = attackService;
+        this.testService = testService;
+        this.debugMainService = debugMainService;
+        this.cutService = cutService;
         this.userService = userService;
         this.eventService = eventService;
         this.userSettingsService = userSettingsService;
@@ -110,7 +122,7 @@ public class GameProgressionService {
             // RESET game progression to TEST_ACTIVE, so that test failures will trigger
             gameProgression.setStatus(TESTS_ACTIVE);
             userGameProgressionRepository.save(gameProgression);
-            componentStatusService.attackCut(gameProgression.getGameProgression().getComponent().getName());
+            attackService.attackCut(gameProgression.getGameProgression().getComponent().getName());
         } else {
             // Re-fetch: gameLoop may have attacked the component and advanced the status meanwhile.
             changeGameProgression(userGameProgressionRepository.findById(currentUserModeKey()).orElseThrow());
@@ -227,15 +239,20 @@ public class GameProgressionService {
                 log.error("Game loop was interrupted.");
                 Thread.currentThread().interrupt();
             }
-            componentStatusService.attackCut(componentName);
+            attackService.attackCut(componentName);
         }
     }
 
     // Only resets the data of the given mode's components, so the other strand's progress is kept.
+    @Transactional
     public void resetGameProgression(GameMode mode) {
         var userId = userService.requireCurrentUserId();
         var componentNames = gameProgressionRepository.findComponentNamesByMode(mode);
         componentStatusService.resetComponentStatus(userId, componentNames);
+        attackService.resetAttacks(userId, componentNames);
+        testService.resetTestsForUser(userId, componentNames);
+        debugMainService.resetRunnersForUser(userId, componentNames);
+        cutService.resetCutsForUser(userId, componentNames);
         initGameProgression(userService.requireCurrentUser(), mode);
         userSettingsService.resetUserSettings();
     }

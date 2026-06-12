@@ -23,8 +23,7 @@ import de.tim_greller.susserver.model.execution.instrumentation.InstrumentationT
 import de.tim_greller.susserver.model.execution.instrumentation.TestRunListener;
 import de.tim_greller.susserver.model.execution.instrumentation.transformer.CoverageClassTransformer;
 import de.tim_greller.susserver.model.execution.instrumentation.transformer.TestClassTransformer;
-import de.tim_greller.susserver.persistence.entity.ComponentStatusEntity;
-import de.tim_greller.susserver.persistence.repository.ComponentStatusRepository;
+import de.tim_greller.susserver.service.game.ComponentStatusService;
 import de.tim_greller.susserver.service.game.EventService;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
@@ -55,7 +54,7 @@ public class ExecutionService {
 
     private final CutService cutService;
     private final TestService testService;
-    private final ComponentStatusRepository componentStatusRepository;
+    private final ComponentStatusService componentStatusService;
     private final EventService eventService;
     @Value("${jarsToInclude}") private List<String> jarsToInclude;
 
@@ -216,10 +215,7 @@ public class ExecutionService {
 
     private Class<?> compileFallbackTests(String componentName, String userId)
             throws NotFoundException, ClassLoadException, CompilationException {
-        // Cannot inject componentStatusService due to circular dependency.
-        int stage = componentStatusRepository.findByKey(componentName, userId)
-                .map(ComponentStatusEntity::getStage)
-                .orElse(1);
+        int stage = componentStatusService.getStage(componentName, userId);
         var testSource = testService.getHiddenTestForComponent(componentName, stage);
         return compile(testSource, componentName, userId);
     }

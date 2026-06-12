@@ -4,16 +4,15 @@ import java.util.Collection;
 import java.util.Optional;
 
 import de.tim_greller.susserver.persistence.entity.ComponentEntity;
-import de.tim_greller.susserver.persistence.entity.ComponentStatusEntity;
 import de.tim_greller.susserver.persistence.entity.DebugMainEntity;
 import de.tim_greller.susserver.persistence.entity.UserDebugMainEntity;
 import de.tim_greller.susserver.persistence.entity.UserEntity;
 import de.tim_greller.susserver.persistence.keys.UserComponentKey;
 import de.tim_greller.susserver.persistence.repository.ComponentRepository;
-import de.tim_greller.susserver.persistence.repository.ComponentStatusRepository;
 import de.tim_greller.susserver.persistence.repository.DebugMainRepository;
 import de.tim_greller.susserver.persistence.repository.UserDebugMainRepository;
 import de.tim_greller.susserver.service.auth.UserService;
+import de.tim_greller.susserver.service.game.ComponentStatusService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -24,7 +23,7 @@ public class DebugMainService {
     private final DebugMainRepository debugMainRepository;
     private final UserDebugMainRepository userDebugMainRepository;
     private final ComponentRepository componentRepository;
-    private final ComponentStatusRepository componentStatusRepository;
+    private final ComponentStatusService componentStatusService;
     private final UserService userService;
 
     // Return the runner the user should see: their saved edits if present,
@@ -35,9 +34,7 @@ public class DebugMainService {
         if (userRunner.isPresent()) {
             return userRunner;
         }
-        int stage = componentStatusRepository.findByKey(componentName, userId)
-                .map(ComponentStatusEntity::getStage)
-                .orElse(1);
+        int stage = componentStatusService.getStage(componentName, userId);
         return debugMainRepository.findByKey(componentName, stage)
                 .map(DebugMainEntity::getSourceCode);
     }

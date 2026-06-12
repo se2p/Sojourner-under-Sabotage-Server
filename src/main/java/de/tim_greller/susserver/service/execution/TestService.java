@@ -14,11 +14,11 @@ import de.tim_greller.susserver.persistence.entity.UserEntity;
 import de.tim_greller.susserver.persistence.keys.ComponentKey;
 import de.tim_greller.susserver.persistence.keys.UserComponentKey;
 import de.tim_greller.susserver.persistence.repository.ComponentRepository;
-import de.tim_greller.susserver.persistence.repository.ComponentStatusRepository;
 import de.tim_greller.susserver.persistence.repository.CutRepository;
 import de.tim_greller.susserver.persistence.repository.FallbackTestRepository;
 import de.tim_greller.susserver.persistence.repository.TestRepository;
 import de.tim_greller.susserver.service.auth.UserService;
+import de.tim_greller.susserver.service.game.ComponentStatusService;
 import de.tim_greller.susserver.service.tracking.UserEventTrackingService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -32,7 +32,7 @@ public class TestService {
     private final UserEventTrackingService trackingService;
     private final ComponentRepository componentRepository;
     private final CutRepository cutRepository;
-    private final ComponentStatusRepository componentStatusRepository;
+    private final ComponentStatusService componentStatusService;
     private final FallbackTestRepository fallbackTestRepository;
 
     public Optional<TestEntity> getTestForComponent(String componentName, String userId) {
@@ -61,11 +61,6 @@ public class TestService {
         final FallbackTestEntity fallbackTest = fallbackTestRepository.findByKey(componentName, stage).orElseThrow();
 
         updateTestForComponent(componentName, userId, fallbackTest.getSourceCode());
-    }
-
-    public TestSourceDTO getHiddenTestForComponent(ComponentStatusEntity componentStatus) {
-        final String componentName = componentStatus.getUserComponentKey().getComponent().getName();
-        return getHiddenTestForComponent(componentName, componentStatus.getStage());
     }
 
     public TestSourceDTO getHiddenTestForComponent(String componentName, int stage) {
@@ -160,9 +155,8 @@ public class TestService {
     // TODO: fallback test method may have same name as an already existing test method
     public void addHiddenTestMethodToUserTest(String methodName, String componentName, String userId) {
         var userTest = getOrCreateTestDtoForComponent(componentName, userId);
-        // Cannot inject componentStatusService due to circular dependency. But the component should always have a status.
-        var componentStatus = componentStatusRepository.findByKey(componentName, userId).orElseThrow();
-        var hiddenTest = getHiddenTestForComponent(componentStatus);
+        var stage = componentStatusService.getStage(componentName, userId);
+        var hiddenTest = getHiddenTestForComponent(componentName, stage);
 
         var hiddenTestMethod = new StringBuilder();
         var lines = hiddenTest.getSourceCode().lines().toList();
