@@ -10,7 +10,6 @@ import de.tim_greller.susserver.events.Event;
 import de.tim_greller.susserver.service.tracking.UserEventTrackingService;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
-import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
@@ -22,15 +21,14 @@ public class EventService {
     private final UserEventTrackingService trackingService;
 
     /**
+     * Publishes an event to the client (the websocket transport).
+     */
+    private final EventPublisher eventPublisher;
+
+    /**
      * Handlers that handle events coming from the client.
      */
     private final Map<Class<? extends Event>, List<Consumer<? extends Event>>> eventHandlers = new HashMap<>();
-
-    /**
-     * Publishes an event to the client.
-     */
-    @Setter
-    private Consumer<Event> eventPublisher;
 
     /**
      * Registers a handler for a specific event type.
@@ -70,12 +68,7 @@ public class EventService {
      */
     public void publishEvent(@NonNull Event event) {
         trackingService.trackEvent(event.getClass().getSimpleName(), event);
-
-        if (eventPublisher != null) {
-            eventPublisher.accept(event);
-        } else {
-            log.error("No event publisher set, cannot publish event {}", event.getClass().getSimpleName());
-        }
+        eventPublisher.publish(event);
     }
 
     /**
