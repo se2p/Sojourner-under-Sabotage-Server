@@ -14,10 +14,12 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor
 public class UserSettingsDTO {
     private boolean codeEditorIntroductionShown;
+    private String debugRoomIntrosShown;
 
     public static UserSettingsDTO fromEntity(UserSettingsEntity userSettingsEntity) {
         return UserSettingsDTO.builder()
                 .codeEditorIntroductionShown(userSettingsEntity.isCodeEditorIntroductionShown())
+                .debugRoomIntrosShown(userSettingsEntity.getDebugRoomIntrosShown())
                 .build();
     }
 
@@ -25,6 +27,7 @@ public class UserSettingsDTO {
         return UserSettingsEntity.builder()
                 .user(new UserKey(user))
                 .codeEditorIntroductionShown(codeEditorIntroductionShown)
+                .debugRoomIntrosShown(debugRoomIntrosShown == null ? "" : debugRoomIntrosShown)
                 .build();
     }
 }

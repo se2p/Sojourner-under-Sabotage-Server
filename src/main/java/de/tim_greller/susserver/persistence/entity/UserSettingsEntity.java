@@ -22,4 +22,8 @@ public class UserSettingsEntity {
 
     @Builder.Default
     private boolean codeEditorIntroductionShown = false;
+
+    // CSV of debug-strand room numbers whose intro popup was already shown (e.g. "1,2").
+    @Builder.Default
+    private String debugRoomIntrosShown = "";
 }

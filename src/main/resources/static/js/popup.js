@@ -104,6 +104,36 @@ class Popup {
         }],
     ]);
 
+    /**
+     * Per-room intro popups for the debugging strand. Each value is a single
+     * PopupText (one step) or an array of PopupText (multistep) — author per room.
+     * @type {Map<number, PopupText|array<PopupText>>}
+     */
+    static #debugRoomIntros = new Map([
+        [1, {
+            title: 'Debugging the Atmosphere Analyzer',
+            content: `<p>The component on the left contains a bug. Find it and fix it.</p>`,
+            cta: 'Start Debugging',
+        }],
+        [2, {
+            title: 'Debugging Room 2',
+            content: `<p>The component on the left contains a bug. Find it and fix it.</p>`,
+            cta: 'Start Debugging',
+        }],
+        [3, {
+            title: 'Debugging Room 3',
+            content: `<p>The component on the left contains a bug. Find it and fix it.</p>`,
+            cta: 'Start Debugging',
+        }],
+    ]);
+
+    /** @type {PopupText} Fallback when a room has no dedicated intro. */
+    static #debugRoomIntroDefault = {
+        title: 'Start Debugging',
+        content: `<p>The component on the left contains a bug. Find it and fix it.</p>`,
+        cta: 'Start Debugging',
+    };
+
     /** @type {Popup} */
     static #instance = null;
 
@@ -147,10 +177,23 @@ class Popup {
         }
         return this;
     }
+    
+    openDebugRoomIntro(room) {
+        const text = Popup.#debugRoomIntros.get(room) ?? Popup.#debugRoomIntroDefault;
+        if (Array.isArray(text)) {
+            this.#multistep = { key: room, index: 0, source: Popup.#debugRoomIntros };
+            this.#renderMultiStep();
+        } else {
+            this.#multistep = false;
+            this.#render(text);
+        }
+        return this;
+    }
 
     #renderMultiStep() {
         if (this.#multistep === false) return;
-        const text = Popup.#text.get(this.#multistep.key)[this.#multistep.index];
+        const source = this.#multistep.source ?? Popup.#text;
+        const text = source.get(this.#multistep.key)[this.#multistep.index];
         this.#render(text);
     }
 
@@ -172,7 +215,8 @@ class Popup {
         if (this.#multistep === false) {
             this.#close();
         } else {
-            const steps = Popup.#text.get(this.#multistep.key).length;
+            const source = this.#multistep.source ?? Popup.#text;
+            const steps = source.get(this.#multistep.key).length;
             this.#multistep.index++;
             if (this.#multistep.index < steps) {
                 this.element.setAttribute('aria-hidden', 'true'); // animate out

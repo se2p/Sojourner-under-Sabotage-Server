@@ -726,6 +726,7 @@ function onContentChangedCut() {
 
 function closeEditor() {
     if (currentComponent) save(currentComponent); // auto save on close
+    if (isDebugStrand()) window.objectiveDisplay?.setInteractionOpen(false);
     currentComponent = false;
     uiOverlay.setAttribute('aria-hidden', 'true');
     document.getElementById('unity-canvas').focus();
@@ -1033,6 +1034,14 @@ window.openDebugger = function (componentName) {
     return window.openEditor(componentName);
 };
 
+window.setPuzzleOpen = function (open) {
+    try {
+        window.objectiveDisplay?.setInteractionOpen(!!open);
+    } catch (e) {
+        console.error('setPuzzleOpen failed', e);
+    }
+};
+
 window.openEditor = async function (componentName) {
     // Check if the introduction should be shown. Then show it immediately, so the user can read it while the editor is still loading.
     Settings.instance.get(Settings.keys.codeEditorIntroductionShown).then(introductionShown => {
@@ -1105,6 +1114,16 @@ window.openEditor = async function (componentName) {
         Popup.instance.open('start debugging').onClose(() => {
             es.sendEvent(new DebugStartEvent(componentName));
         });
+    }
+    
+    if (debugging && gameProgress?.status === 'DEBUGGING') {
+        window.objectiveDisplay?.setInteractionOpen(true);
+        const shownCsv = (await Settings.instance.get(Settings.keys.debugRoomIntrosShown)) ?? '';
+        const shown = shownCsv.split(',').filter(Boolean).map(Number);
+        if (!shown.includes(gameProgress.room)) {
+            Popup.instance.openDebugRoomIntro(gameProgress.room);
+            await Settings.instance.set(Settings.keys.debugRoomIntrosShown, [...shown, gameProgress.room].join(','));
+        }
     }
 
     window.editors.monaco.debug.layout();

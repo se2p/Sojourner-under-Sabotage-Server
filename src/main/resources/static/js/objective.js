@@ -29,10 +29,65 @@ class OffViewportInfo {
 }
 
 class ObjectiveDisplay extends OffViewportInfo {
+    
+    static objectives = {
+        Debugging: {
+            TALK: {
+                // default: { objective: '…', details: '<p>…</p>' },
+                // 1: { objective: '…', details: '<p>…room 1…</p>' },
+            },
+            PUZZLE: {
+                // default: { objective: '…', details: '<p>…</p>' },
+            },
+            DEBUGGING: {
+                // 1: { objective: '…', details: '<p>…room 1…</p>' },
+            },
+        },
+        Testing: {},
+    };
+    
+    static twoPhase = {
+        PUZZLE: {
+            navigation: component => ({
+                objective: `Go to the ${component} puzzle`,
+                details: `<p>Find the ${component} in this room and interact with it (press the interact key) ` +
+                    `to start the puzzle.</p>`,
+            }),
+            active: () => ({
+                objective: 'Solve the puzzle',
+                details: '<p>Work through the puzzle on screen. It teaches the debugging concept ' +
+                    'you\'ll need to track down the bug in this room\'s component.</p>',
+            }),
+        },
+        DEBUGGING: {
+            navigation: component => ({
+                objective: `Go to the ${component}`,
+                details: `<p>Find the ${component} in this room and interact with it (press the interact key) ` +
+                    `to open the debugger.</p>`,
+            }),
+            active: () => ({
+                objective: 'Find the bug and fix it',
+                details: '<p>The components code (on the left) was mutated by the attacker. Find the bug and fix it.</p><p>' +
+                    'You can use <code>System.out.println(...);</code> to print out values and strings while you\'re ' +
+                    'debugging the code.</p><p> You can also write new or modify old tests to try out different scenarios.</p>',
+            }),
+        },
+    };
+
     constructor(selector) {
         super(selector);
 
+        /** @type {UserGameProgressionDTO | null} the last progression we rendered for */
+        this.current = null;
+        /** @type {boolean} whether the player has opened the puzzle / debugger for the current state */
+        this.interactionOpen = false;
+
         es.registerHandler(GameProgressionChangedEvent.type, this.gameProgressionChanged.bind(this));
+    }
+    
+    getObjective(mode, status, room) {
+        const forStatus = ObjectiveDisplay.objectives[mode]?.[status];
+        return forStatus?.[room] ?? forStatus?.default;
     }
 
     /**
@@ -55,7 +110,36 @@ class ObjectiveDisplay extends OffViewportInfo {
 
     /** @param {{progression:UserGameProgressionDTO}} evt */
     gameProgressionChanged(evt) {
-        switch (evt.progression.status) {
+        this.current = evt.progression;
+        this.interactionOpen = false; // a fresh state always starts on the "go there" beat
+        this.renderObjective();
+    }
+    
+    setInteractionOpen(open) {
+        this.interactionOpen = open;
+        this.renderObjective();
+    }
+
+    renderObjective() {
+        const progression = this.current;
+        if (!progression) return;
+
+        // A per-(mode, status, room) override wins over the inline defaults below.
+        const override = this.getObjective(progression.mode, progression.status, progression.room);
+        if (override) {
+            this.setObjective(override.objective, override.details);
+            return;
+        }
+
+        // Debug strand: PUZZLE and DEBUGGING split into a navigation and an active beat.
+        const phase = ObjectiveDisplay.twoPhase[progression.status];
+        if (progression.mode === 'Debugging' && phase) {
+            const beat = (this.interactionOpen ? phase.active : phase.navigation)(progression.componentName);
+            this.setObjective(beat.objective, beat.details);
+            return;
+        }
+
+        switch (progression.status) {
             case 'DOOR':
                 this.setObjective(
                     'Fix the door',
@@ -69,7 +153,7 @@ class ObjectiveDisplay extends OffViewportInfo {
             case 'TALK':
                 this.setObjective(
                     'Talk to the robot',
-                    'You\'re now in the '+this.getRoomName(evt.progression.room)+'! ' +
+                    'You\'re now in the '+this.getRoomName(progression.room)+'! ' +
                     'Talk to the robot and find out more about this room.'
                 );
                 break;
