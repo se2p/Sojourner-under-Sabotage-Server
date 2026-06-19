@@ -26,7 +26,7 @@ public class AdminControllerWeb {
 
     @GetMapping("/admin")
     public String admin(Model model) {
-        model.addAttribute("surveyUrl", surveyService.getSurveyUrl());
+        model.addAttribute("surveyUrl", surveyService.getFinalSurveyUrl());
         model.addAttribute("showSurvey", surveyService.isSurveyActive());
         return "admin";
     }

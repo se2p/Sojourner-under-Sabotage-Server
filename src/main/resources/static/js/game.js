@@ -737,3 +737,7 @@ document.addEventListener('keydown', e => {
 
 window.objectiveDisplay = new ObjectiveDisplay('#objective');
 window.surveyDisplay = new OffViewportInfo('#survey');
+
+document.getElementById("open-survey").addEventListener('click', (e) => {
+    e.target.innerText = (e.target.innerText === "Pre-Questionnaire") ? "Post-Questionnaire" : "Feedback-Survey";
+});
