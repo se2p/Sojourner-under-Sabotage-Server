@@ -20,6 +20,8 @@ public class EventService {
 
     private final UserEventTrackingService trackingService;
 
+    private final ActiveGameModeService activeModeService;
+
     /**
      * Publishes an event to the client (the websocket transport).
      */
@@ -48,10 +50,13 @@ public class EventService {
      * @param event The event to handle.
      * @param <T> The type of the event.
      */
-    @SuppressWarnings("unchecked")
     public <T extends Event> void handleEvent(@NonNull T event) {
-        trackingService.trackEvent(event.getClass().getSimpleName(), event);
+        trackEvent(event);
+        dispatchToHandlers(event);
+    }
 
+    @SuppressWarnings("unchecked")
+    private <T extends Event> void dispatchToHandlers(@NonNull T event) {
         Class<T> eventType = (Class<T>) event.getClass();
         if (eventHandlers.containsKey(eventType)) {
             List<Consumer<? extends Event>> handler = eventHandlers.get(eventType);
@@ -67,7 +72,7 @@ public class EventService {
      * @param event The event to publish.
      */
     public void publishEvent(@NonNull Event event) {
-        trackingService.trackEvent(event.getClass().getSimpleName(), event);
+        trackEvent(event);
         eventPublisher.publish(event);
     }
 
@@ -78,7 +83,19 @@ public class EventService {
      * @param <T> The type of the event.
      */
     public <T extends Event> void publishAndHandleEvent(@NonNull T event) {
-        handleEvent(event);
-        publishEvent(event);
+        trackEvent(event);
+        dispatchToHandlers(event);
+        eventPublisher.publish(event);
+    }
+
+    /**
+     * Tags the event with the strand it belongs to and records it for analytics.
+     * The mode must be set before tracking, so the persisted JSON carries it.
+     */
+    private void trackEvent(@NonNull Event event) {
+        if (event.getMode() == null) {
+            event.setMode(activeModeService.getModeForCurrentUser());
+        }
+        trackingService.trackEvent(event.getClass().getSimpleName(), event);
     }
 }

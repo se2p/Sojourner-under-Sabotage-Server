@@ -1,5 +1,11 @@
 package de.tim_greller.susserver.model.execution.instrumentation.adapter;
 
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.TreeMap;
+
 import de.tim_greller.susserver.model.execution.instrumentation.InstrumentationTracker;
 import org.springframework.asm.Label;
 import org.springframework.asm.MethodVisitor;
@@ -12,11 +18,51 @@ abstract class VarTrackingMethodVisitor extends MethodVisitor {
 
     private final String classId;
     private final String methodName;
+    private final int access;
+    private final String descriptor;
+    private boolean parametersTracked;
+    private final Map<Label, Integer> labelPositions = new HashMap<>();
+    private final List<Integer> stepSites = new ArrayList<>();
+    private final List<Scope> scopes = new ArrayList<>();
 
-    protected VarTrackingMethodVisitor(int api, MethodVisitor delegate, String classId, String methodName) {
+    protected VarTrackingMethodVisitor(int api, MethodVisitor delegate, String classId, String methodName,
+                                       int access, String descriptor) {
         super(api, delegate);
         this.classId = classId;
         this.methodName = methodName;
+        this.access = access;
+        this.descriptor = descriptor;
+    }
+
+    // The tracker only learns a value from the *STORE that writes it, but parameters arrive
+    // already in their slots and are never stored. Without this they stay invisible for their
+    // whole method, and the debugger shows an empty frame while stepping through a callee.
+    private void trackParameters() {
+        int slot = (access & Opcodes.ACC_STATIC) == 0 ? 1 : 0; // slot 0 is "this"; fields are reported separately
+        for (Type argument : Type.getArgumentTypes(descriptor)) {
+            super.visitVarInsn(argument.getOpcode(Opcodes.ILOAD), slot);
+            visitLdcInsn(slot);
+            visitLdcInsn(classId);
+            visitLdcInsn(methodName);
+            visitMethodInsn(
+                    Opcodes.INVOKESTATIC,
+                    Type.getInternalName(InstrumentationTracker.class),
+                    "trackVar",
+                    "(" + trackVarSignature(argument) + "ILjava/lang/String;Ljava/lang/String;)V",
+                    false);
+            slot += argument.getSize();
+        }
+    }
+
+    // Mirrors the *STORE mapping: everything the JVM holds in an int slot is reported as an int
+    private static String trackVarSignature(Type type) {
+        return switch (type.getSort()) {
+            case Type.BOOLEAN, Type.BYTE, Type.CHAR, Type.SHORT, Type.INT -> "I";
+            case Type.FLOAT -> "F";
+            case Type.LONG -> "J";
+            case Type.DOUBLE -> "D";
+            default -> "Ljava/lang/Object;";
+        };
     }
 
     // On every variable STORE, reload the stored value and report it to trackVar
@@ -73,22 +119,67 @@ abstract class VarTrackingMethodVisitor extends MethodVisitor {
                 "trackLineVisit",
                 "(ILjava/lang/String;)V",
                 false);
+        // Report the parameters once the first line of the method has been visited: the tracker
+        // files values under the line last visited, which until now was still the caller's.
+        if (!parametersTracked) {
+            parametersTracked = true;
+            trackParameters();
+        }
+        final int siteId = stepSites.size();
+        stepSites.add(positionOf(pStart));
         visitLdcInsn(pLine);
         visitLdcInsn(classId);
         visitLdcInsn(methodName);
+        visitLdcInsn(siteId);
         visitMethodInsn(
                 Opcodes.INVOKESTATIC,
                 Type.getInternalName(InstrumentationTracker.class),
                 "trackDebugStep",
-                "(ILjava/lang/String;Ljava/lang/String;)V",
+                "(ILjava/lang/String;Ljava/lang/String;I)V",
                 false);
     }
 
-    // Register each local variable name or descriptor so stored values can be resolved
+    // Labels are visited in code order, so their visit order is a usable stand-in for a bytecode
+    // offset: it is all the scope ranges below need in order to be compared against a step site.
+    @Override
+    public void visitLabel(Label label) {
+        super.visitLabel(label);
+        labelPositions.putIfAbsent(label, labelPositions.size());
+    }
+
+    private int positionOf(Label label) {
+        return labelPositions.getOrDefault(label, Integer.MAX_VALUE);
+    }
+
     @Override
     public void visitLocalVariable(String name, String descriptor, String signature,
                                    Label start, Label end, int index) {
         super.visitLocalVariable(name, descriptor, signature, start, end, index);
-        InstrumentationTracker.trackVarDef(index, name, descriptor, classId, methodName);
+        // "this" is not a local the player wrote; its fields are reported separately as "this.x"
+        if (!"this".equals(name)) {
+            scopes.add(new Scope(index, name, positionOf(start), positionOf(end)));
+        }
     }
+
+    // The local variable table only arrives after the code, so a name cannot be resolved while the
+    // instructions are visited. Resolve it here instead, per step site, exactly like a debugger
+    // does: a slot carries the name of the scope covering that site. This keeps two variables that
+    // share a slot apart (sibling blocks reuse slots), and hides the compiler's synthetic slots,
+    // which have no scope at all and would otherwise borrow an unrelated variable's name.
+    @Override
+    public void visitEnd() {
+        for (int siteId = 0; siteId < stepSites.size(); siteId++) {
+            final int sitePosition = stepSites.get(siteId);
+            final Map<Integer, String> visibleNames = new TreeMap<>();
+            for (Scope scope : scopes) {
+                if (scope.start <= sitePosition && sitePosition < scope.end) {
+                    visibleNames.put(scope.slot, scope.name);
+                }
+            }
+            InstrumentationTracker.registerStepSite(classId, methodName, siteId, visibleNames);
+        }
+        super.visitEnd();
+    }
+
+    private record Scope(int slot, String name, int start, int end) {}
 }

@@ -32,15 +32,51 @@ class ObjectiveDisplay extends OffViewportInfo {
     
     static objectives = {
         Debugging: {
+            DOOR: {
+                // Debug DOOR is the ship intro + trip down, not the testing wire minigame.
+                default: {
+                    objective: 'Travel to the temple',
+                    details: '<p>Talk to the robot, then step onto the teleporter pad to travel ' +
+                        'down to the temple on the planet below.</p>',
+                },
+                1: {
+                    objective: 'Talk to the robot and explore your surroundings',
+                    details: '<p>Talk to the robot to find out what\'s going on, then have a look around ' +
+                        'the ship. Use the telescope to scan the planet; once the scan finishes, step onto ' +
+                        'the teleporter pad to travel down.</p>',
+                },
+            },
             TALK: {
-                // default: { objective: '…', details: '<p>…</p>' },
-                // 1: { objective: '…', details: '<p>…room 1…</p>' },
+                // TALK = the planet-outside phase; entering the temple ends it. So these say
+                // "head to the entrance", and they must not name what's found inside — the
+                // authored dialogue (Debug.unity) keeps each temple's discovery a surprise.
+                1: {
+                    objective: 'You\'ve landed on the planet. Talk to the robot and head north.',
+                    details: '<p>You\'ve landed on the planet, right by the first temple. Talk to the ' +
+                        'robot, then head north to the temple entrance. There are plants and a few ' +
+                        'other structures nearby if you want to look around first.</p>',
+                },
+                2: {
+                    objective: 'Head to the second temple',
+                    details: '<p>Talk to the robot, then make your way to the temple entrance in the north.</p>',
+                },
+                3: {
+                    objective: 'Head to the third temple',
+                    details: '<p>Talk to the robot, then head north to the temple entrance.</p>',
+                },
+                4: {
+                    objective: 'Head to the last temple',
+                    details: '<p>Talk to the robot, then find the temple entrance. This structure ' +
+                        'is more secluded than all the others. Whatever happened on this planet, the ' +
+                        'answer should be inside.</p>',
+                },
             },
             PUZZLE: {
                 // default: { objective: '…', details: '<p>…</p>' },
             },
             DEBUGGING: {
-                // 1: { objective: '…', details: '<p>…room 1…</p>' },
+                // Careful: an override here replaces BOTH beats (navigation + active).
+                // Room-specific texts for the active beat belong in twoPhase.DEBUGGING.active.
             },
         },
         Testing: {},
@@ -48,29 +84,89 @@ class ObjectiveDisplay extends OffViewportInfo {
     
     static twoPhase = {
         PUZZLE: {
-            navigation: component => ({
-                objective: `Go to the ${component} puzzle`,
-                details: `<p>Find the ${component} in this room and interact with it (press the interact key) ` +
-                    `to start the puzzle.</p>`,
+            // PUZZLE only starts once the player walks into the temple (TempleEnteredEvent),
+            // so this is always the in-temple objective; outside is covered by TALK.
+            navigation: () => ({
+                objective: 'Make your way further into the temple',
+                details: '<p>The temple holds a single puzzle station. Interact with it and solve the puzzle ' +
+                    'to open the hidden chamber at the back.</p>' +
+                    '<p>Take a close look at what the builders left there and take it with you, then step onto ' +
+                    'the portal back to the ship.</p>',
             }),
             active: () => ({
                 objective: 'Solve the puzzle',
-                details: '<p>Work through the puzzle on screen. It teaches the debugging concept ' +
-                    'you\'ll need to track down the bug in this room\'s component.</p>',
+                details: '<p>Work through the puzzle on screen. Use the information icons for further descriptions of each component</p>',
             }),
         },
         DEBUGGING: {
+            // The component consoles all sit on the ship;
             navigation: component => ({
                 objective: `Go to the ${component}`,
-                details: `<p>Find the ${component} in this room and interact with it (press the interact key) ` +
-                    `to open the debugger.</p>`,
+                details: `<p>The ${component} is on the ship. Find the ${component} and interact with it.</p>`,
             }),
-            active: () => ({
-                objective: 'Find the bug and fix it',
-                details: '<p>The components code (on the left) was mutated by the attacker. Find the bug and fix it.</p><p>' +
-                    'You can use <code>System.out.println(...);</code> to print out values and strings while you\'re ' +
-                    'debugging the code.</p><p> You can also write new or modify old tests to try out different scenarios.</p>',
-            }),
+            active: (component, room) => {
+                switch (room) {
+                    case 1: return {
+                        objective: 'Find the step that corrupts the value',
+                        details: '<p>Same idea as the leaking pipes: the analyzer\'s scan reading flows through six ' +
+                            'steps, and one of them corrupts it. From the outside you only see the wrong result at ' +
+                            'the very end.</p><p>' +
+                            'The runner on the right already keeps what every step returns in its own variable, and ' +
+                            'notes underneath what it should return. Press <em>Debug</em> and step through the run ' +
+                            'to find the first step that disagrees. Fastest is to check the middle first: every check halves the search. Click ' +
+                            'left of a line number to set a breakpoint and stop right there.</p><p>' +
+                            'Fix that step in the code on the left, then press <em>Run</em>: the component is repaired ' +
+                            'once the hidden tests pass.</p>',
+                    };
+                    case 2: return {
+                        objective: 'Find the step that corrupts the state',
+                        details: '<p>Just like watching the state change in the temple, the bay\'s state walks ' +
+                            'through the day cycle step by step: power up, read the sensor, open the vent, night ' +
+                            'mode, seal the vent. At the end the vent should be sealed and the power off - instead ' +
+                            'it is still open, and the power flag flipped back on by itself.</p><p>' +
+                            'The runner on the right walks the cycle step by step and reads the bay\'s state after ' +
+                            'each one; write down what you expect first, then step through with <em>Debug</em>. Find ' +
+                            'the first step where the state stops matching what you expect - that method holds the ' +
+                            'bug. Fix it in the code on the left, then press ' +
+                            '<em>Run</em>: the component is repaired once the hidden tests pass.</p>',
+                    };
+                    case 3: return {
+                        objective: 'Trace the inert dose back to its source',
+                        details: '<p>Like tracing a mixture back through the vats in the temple, the bay builds the ' +
+                            'sample\'s dose over a chain of steps, each one handing its return value to the next. ' +
+                            'The dose comes out inert, so the sample doesn\'t react - but the step that reports the ' +
+                            'failure is only the last one in the chain.</p><p>' +
+                            'Set a breakpoint and press <em>Debug</em>, then work backwards: check what the step ' +
+                            'before returned, and keep going back until you find the first one that returns ' +
+                            'something it shouldn\'t. Each method\'s comment says what it is supposed to return. ' +
+                            'Fix that step in the code on the left, then press <em>Run</em>: the component is ' +
+                            'repaired once the hidden tests pass.</p>',
+                    };
+                    case 4: return {
+                        objective: 'Find out why the departure window stays shut',
+                        details: '<p>Like the hypothesis machine in the temple, the beacon takes several readings and ' +
+                            'builds the teleport link from them - any of them could be the reason the link comes out ' +
+                            'FAILED. Form a hypothesis about which one is to blame, then try to refute it: predict ' +
+                            'what you must see if it is true, and check. An observation that contradicts the ' +
+                            'prediction rules that hypothesis out, form the next one and test again.</p><p>' +
+                            'Set a breakpoint in <em>canDepartPlanet</em>, press <em>Debug</em> and compare each ' +
+                            'value against what the method\'s comment says it should be; if the readings look right ' +
+                            'but the link still fails, step into <em>createTeleportLink</em> and check what its ' +
+                            'parameters actually carry. More than one thing is wrong, so keep testing after your ' +
+                            'first fix. Fix the code on the left, then press <em>Run</em>: the component is repaired ' +
+                            'once the hidden tests pass.</p>',
+                    };
+                    default: return {
+                        objective: 'Find the bug and fix it',
+                        details: '<p>The component\'s code (on the left) contains a bug. Track it down the way the puzzle ' +
+                            'taught you.</p><p>' +
+                            'Click left of a line number to set a breakpoint, press <em>Debug</em> and inspect the ' +
+                            'variables at each stop.</p><p>' +
+                            'Fix the bug in the code on the left, then press <em>Run</em>: the component is repaired ' +
+                            'once the hidden tests pass.</p>',
+                    };
+                }
+            },
         },
     };
 
@@ -114,7 +210,7 @@ class ObjectiveDisplay extends OffViewportInfo {
         this.interactionOpen = false; // a fresh state always starts on the "go there" beat
         this.renderObjective();
     }
-    
+
     setInteractionOpen(open) {
         this.interactionOpen = open;
         this.renderObjective();
@@ -134,7 +230,7 @@ class ObjectiveDisplay extends OffViewportInfo {
         // Debug strand: PUZZLE and DEBUGGING split into a navigation and an active beat.
         const phase = ObjectiveDisplay.twoPhase[progression.status];
         if (progression.mode === 'Debugging' && phase) {
-            const beat = (this.interactionOpen ? phase.active : phase.navigation)(progression.componentName);
+            const beat = (this.interactionOpen ? phase.active : phase.navigation)(progression.componentName, progression.room);
             this.setObjective(beat.objective, beat.details);
             return;
         }

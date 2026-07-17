@@ -1,2 +1,5 @@
 orderIndex;roomId;componentName;stage;delaySeconds;
-1001;1;AtmosphereAnalyzer;1;25;
+1001;1;ArtifactAnalyzer;1;25;
+1002;2;VentControl;1;25;
+1003;3;PlantContainment;1;25;
+1004;4;TeleportBeacon;1;25;

@@ -2,6 +2,7 @@ package de.tim_greller.susserver.dto;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import lombok.AllArgsConstructor;
 import lombok.Getter;
@@ -20,6 +21,8 @@ public class TestExecutionResultDTO {
     private Map<String, TestDetailsDTO> testDetails;
     private Map<String, Integer> coveredLines;
     private Map<String, Integer> totalLines;
+    // The lines a breakpoint can bind to: only these carry a LineNumberTable entry and thus a DebugStep.
+    private Map<String, Set<Integer>> executableLines;
     private Map<String, Map<Integer, Integer>> coverage;
     private Map<String, Map<Integer, Map<String, String>>> variables;
     private Map<String, List<LogEntry>> logs;

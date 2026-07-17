@@ -193,6 +193,11 @@ class PuzzleSolvedEvent extends SusEvent {
   type = PuzzleSolvedEvent.type;
 }
 
+class TempleEnteredEvent extends SusEvent {
+  static type = ".TempleEnteredEvent";
+  type = TempleEnteredEvent.type;
+}
+
 class GameProgressionChangedEvent extends SusEvent {
   static type = ".GameProgressionChangedEvent";
   type = GameProgressionChangedEvent.type;

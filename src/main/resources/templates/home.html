@@ -37,6 +37,29 @@
                 <a th:if="${hasTestingSave}" th:href="@{/game}" class="button">Continue</a>
                 <a sec:authorize="isAuthenticated()" th:href="@{/reset}"
                    th:class="${hasTestingSave} ? 'btn-small' : 'button'" class="button">New game</a>
+                <div class="strand-intro">
+                    <h3><span class="orange">You were never meant to be awake.</span></h3>
+                    <p>
+                        Aboard the Sojourner, humanity’s last hope drifts silently between the stars,
+                        bound for a distant solar system where salvation waits:
+                        A material powerful enough to bind greenhouse gases and heal Earth’s poisoned skies.
+                        The journey should have lasted decades, your body preserved in cryogenic sleep until arrival.
+                    </p><p>
+                        <strong>But something went wrong.</strong><br>
+                        Your pod cracked open many years too early, due to a software error in the capsules code.
+                        Someone — or something — has been tampering with the ship.
+                        More and more subtle faults appear in critical components, threatening the mission’s survival.
+                        Are these random malfunctions&hellip; or deliberate sabotage?
+                    </p><p>
+                        Gladly, you are not entirely alone.<br>
+                        A service robot accompanies you, guiding and assisting as you secure each system.
+                        With the power of automated tests, you can detect bugs and repair sabotaged components before they cause any further harm.
+                        <!--Yet the questions remains: who is behind these attacks, and how do they breach the very heart of the Sojourner?-->
+                    </p><!--p>
+                        Every test you write, every failure you catch, brings you closer to the truth.
+                        And to the realization that not all allies can be trusted.
+                    </p-->
+                </div>
             </div>
             <div class="strand-card">
                 <h2 class="strand-name">Debugging</h2>
@@ -44,31 +67,28 @@
                 <a th:if="${hasDebuggingSave}" th:href="@{/game(mode='Debugging')}" class="button">Continue</a>
                 <a sec:authorize="isAuthenticated()" th:href="@{/reset-debug}"
                    th:class="${hasDebuggingSave} ? 'btn-small' : 'button'" class="button">New game</a>
+                <div class="strand-intro">
+                    <h3><span class="orange">You were woken.</span></h3>
+                    <p>
+                        Aboard the Sojourner, humanity’s last hope drifts silently between the stars,
+                        bound for a distant solar system where salvation waits.
+                        The journey should have lasted decades, your body preserved in cryogenic sleep until arrival.
+                    </p><p>
+                        <strong>But the ship’s long-range sensors found something no chart predicted.</strong><br>
+                        A planet that should be dead, yet its surface is covered in structures.
+                        Whoever built them has vanished without a trace:
+                        Only sealed temples and worn down machinery remain.
+                    </p><p>
+                        Gladly, you are not entirely alone.<br>
+                        A service robot accompanies you to the surface, guiding you through the ruins
+                        as you recover what the Builders left behind.
+                        But each find strains the aging ship, and one component after another starts acting up.
+                        By observing carefully, forming hypotheses and narrowing down the fault,
+                        you debug each system and, piece by piece, uncover what happened on this planet.
+                    </p>
+                </div>
             </div>
         </div>
-    </div>
-    <div class="intro">
-        <h2><span class="orange">You were never meant to be awake.</span></h2>
-        <p>
-            Aboard the Sojourner, humanity’s last hope drifts silently between the stars,
-            bound for a distant solar system where salvation waits:
-            A material powerful enough to bind greenhouse gases and heal Earth’s poisoned skies.
-            The journey should have lasted decades, your body preserved in cryogenic sleep until arrival.
-        </p><p>
-            <strong>But something went wrong.</strong><br>
-            Your pod cracked open many years too early, due to a software error in the capsules code.
-            Someone — or something — has been tampering with the ship.
-            More and more subtle faults appear in critical components, threatening the mission’s survival.
-            Are these random malfunctions&hellip; or deliberate sabotage?
-        </p><p>
-            Gladly, you are not entirely alone.<br>
-            A service robot accompanies you, guiding and assisting as you secure each system.
-            With the power of automated tests, you can detect bugs and repair sabotaged components before they cause any further harm.
-            <!--Yet the questions remains: who is behind these attacks, and how do they breach the very heart of the Sojourner?-->
-        </p><!--p>
-            Every test you write, every failure you catch, brings you closer to the truth.
-            And to the realization that not all allies can be trusted.
-        </p-->
     </div>
     <div class="research">
         <h2>Research</h2>

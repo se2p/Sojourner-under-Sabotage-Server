@@ -5,6 +5,7 @@ import static org.springframework.asm.Opcodes.ASM7;
 import de.tim_greller.susserver.model.execution.instrumentation.InstrumentationTracker;
 import org.springframework.asm.ClassVisitor;
 import org.springframework.asm.ClassWriter;
+import org.springframework.asm.Label;
 import org.springframework.asm.MethodVisitor;
 import org.springframework.asm.Opcodes;
 import org.springframework.asm.Type;
@@ -29,7 +30,13 @@ public class TestInstrumentationAdapter extends ClassVisitor {
             final String[] pExceptions) {
         final MethodVisitor mv = super.visitMethod(pAccess, pMethodName, pDescriptor, pSignature, pExceptions);
 
-        return new VarTrackingMethodVisitor(ASM7, mv, testClassId, pMethodName) {
+        return new VarTrackingMethodVisitor(ASM7, mv, testClassId, pMethodName, pAccess, pDescriptor) {
+            @Override
+            public void visitLineNumber(final int pLine, final Label pStart) {
+                InstrumentationTracker.trackLine(pLine, testClassId);
+                super.visitLineNumber(pLine, pStart);
+            }
+
             @Override
             public void visitCode() {
                 // track method entered

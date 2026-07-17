@@ -23,7 +23,7 @@ main.screen {
     z-index: 2;
 }
 
-.teaser, .intro, .research {
+.teaser, .research {
     max-width: 50rem;
     min-height: 100vh;
     margin: 0 auto;
@@ -32,9 +32,6 @@ main.screen {
     justify-content: center;
     align-items: center;
     padding-block: 4rem;
-}
-.intro {
-    text-align: center;
 }
 /* Tighter than the shared 4rem so the strand cards fit the viewport even with both buttons. */
 .teaser {
@@ -119,8 +116,8 @@ h1 {
     align-items: center;
     gap: 0.6rem;
     background: rgba(255,255,255,.03);
-    min-width: 14rem;
-    max-width: 18rem;
+    flex: 1 1 20rem;
+    max-width: 27rem;
     text-align: center;
     transition: border-color .3s, box-shadow .3s;
 }
@@ -149,6 +146,15 @@ h1 {
 .strand-card .btn-small:focus {
     text-underline-offset: 4px;
     color: #fff;
+}
+.strand-intro {
+    margin-top: 1rem;
+    font-size: .9rem;
+    text-align: center;
+}
+.strand-intro h3 {
+    margin: 0;
+    letter-spacing: 2px;
 }
 
 .box {
@@ -253,10 +259,6 @@ small,
     color: #bbb;
 }
 
-.intro h2 {
-    margin: 0;
-    letter-spacing: 2px;
-}
 .research h2 {
     text-align: center;
     width: 100%;

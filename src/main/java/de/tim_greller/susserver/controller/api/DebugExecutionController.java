@@ -11,6 +11,7 @@ import de.tim_greller.susserver.service.auth.UserService;
 import de.tim_greller.susserver.service.execution.DebugMainService;
 import de.tim_greller.susserver.service.execution.ExecutionService;
 import de.tim_greller.susserver.service.game.ActiveGameModeService;
+import de.tim_greller.susserver.service.tracking.UserEventTrackingService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -30,6 +31,7 @@ public class DebugExecutionController {
     private final ExecutionService executionService;
     private final DebugMainService debugMainService;
     private final ActiveGameModeService activeModeService;
+    private final UserEventTrackingService trackingService;
 
     // Save and run the user's runner body (the server wraps it into the DebugRunner class)
     // and return the result including the debug trace.
@@ -41,14 +43,18 @@ public class DebugExecutionController {
 
         activeModeService.bindMode(GameMode.Debugging);
         try {
-            return executionService.executeDebugRunner(
+            var result = executionService.executeDebugRunner(
                     componentName,
                     userService.requireCurrentUserId(),
                     runnerSource.getCode()
             );
+            trackingService.trackEvent("debug-executed", result);
+            return result;
         } catch (CompilationException | ClassLoadException | TestExecutionException e) {
+            trackingService.trackEvent("debug-execution-failed", e.getMessage());
             throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, e.getMessage());
         } catch (NotFoundException e) {
+            trackingService.trackEvent("debug-not-found", e.getMessage());
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, e.getMessage());
         } finally {
             activeModeService.clearMode();

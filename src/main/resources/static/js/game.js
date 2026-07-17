@@ -192,7 +192,10 @@ function constrain(editableRanges, editorName = 'test') {
 
     if (editors.restricted[editorName]) {
         constrainedInstance = editors.restricted[editorName];
-        constrainedInstance.removeRestrictionsIn(editor.getModel());
+        // _isRestrictedModel disappears with disposeRestrictions; removing twice throws
+        if (editor.getModel()._isRestrictedModel) {
+            constrainedInstance.removeRestrictionsIn(editor.getModel());
+        }
     } else {
         constrainedInstance = constrainedEditor(monaco);
         editors.restricted[editorName] = constrainedInstance;
@@ -332,15 +335,83 @@ let _debugStepIndex = 0;
 const _breakpoints = {debug: new Set(), test: new Set()};
 const _bpDecorations = {debug: [], test: []};
 
+// Display lines that carry a LineNumberTable entry, per editor, from the last run.
+// Only these lines ever produce a DebugStep, so only these can hold a breakpoint.
+const _executableLines = {debug: null, test: null};
+
+// Take over the executable lines of a run result and re-snap the existing breakpoints,
+// which may have been placed before any run, i.e. without this information.
+function _updateExecutableLines(executableLines) {
+    const byEditor = {
+        debug: executableLines?.[window.cutClassName + '#' + window.userId],
+        test: executableLines?.[window.testClassName + '#' + window.userId],
+    };
+    ['debug', 'test'].forEach(key => {
+        const lines = byEditor[key];
+        if (!lines) return;
+        _executableLines[key] = new Set(lines.map(l => _toDisplayLine(l, key)));
+        const snapped = new Set([..._breakpoints[key]].map(l => _snapBreakpointLine(key, l)));
+        _breakpoints[key] = snapped;
+        _renderBreakpointDecorations(key);
+    });
+}
+
+// javac reports a multi-line statement (an if spanning several lines, a chained call, ...)
+// on the line it starts on, so a breakpoint on any of its later lines could never hit.
+// Move such a breakpoint up to the statement it belongs to.
+function _snapBreakpointLine(editorKey, lineNumber) {
+    const lines = _executableLines[editorKey];
+    if (!lines || lines.has(lineNumber)) return lineNumber;
+    let snapped = null;
+    for (const line of lines) {
+        if (line < lineNumber && (snapped === null || line > snapped)) snapped = line;
+    }
+    return snapped ?? lineNumber;
+}
+
+// Fire-and-forget analytics for debugger UI interactions (breakpoints, buttons).
+// Recorded server-side via POST /track; failures are ignored so tracking never blocks the UI.
+function trackClientEvent(eventType, details = {}) {
+    try {
+        fetch(`${apiUrl}/track`, {
+            method: 'POST',
+            headers: jsonHeader,
+            keepalive: true,
+            body: JSON.stringify({
+                eventType,
+                details: {
+                    component: currentComponent || null,
+                    strand: isDebugStrand() ? 'debug' : 'test',
+                    room: gameProgress?.room ?? null,
+                    stage: gameProgress?.stage ?? null,
+                    status: gameProgress?.status ?? null,
+                    ...details,
+                },
+            }),
+        }).catch(() => {});
+    } catch (e) { /* never let tracking break the UI */ }
+}
+window.trackClientEvent = trackClientEvent;
+
+// Same as trackClientEvent, but only ever fires in the debug strand; no-op in testing.
+function trackDebugEvent(eventType, details = {}) {
+    if (isDebugStrand()) trackClientEvent(eventType, details);
+}
+
 // Add/remove a breakpoint on a line and redraw the gutter markers
-function _toggleBreakpoint(editorKey, lineNumber) {
+function _toggleBreakpoint(editorKey, clickedLine) {
     const editor = window.editors.monaco[editorKey];
     if (!editor) return;
+    const lineNumber = _snapBreakpointLine(editorKey, clickedLine);
     const bp = _breakpoints[editorKey];
+    const details = {editor: editorKey, line: lineNumber};
+    if (lineNumber !== clickedLine) details.snappedFrom = clickedLine;
     if (bp.has(lineNumber)) {
         bp.delete(lineNumber);
+        trackClientEvent('debug-breakpoint-removed', details);
     } else {
         bp.add(lineNumber);
+        trackClientEvent('debug-breakpoint-added', details);
     }
     _renderBreakpointDecorations(editorKey);
 }
@@ -412,9 +483,13 @@ function renderDebugTrace(debugTrace) {
 // The line shown in its editor for a step. In the debug strand the runner body
 // (right editor) is offset by the wrapper header the server prepends before running.
 function _stepDisplayLine(step) {
-    return (isDebugStrand() && step._source === 'test')
-        ? step.lineNumber - _runnerLineOffset
-        : step.lineNumber;
+    return _toDisplayLine(step.lineNumber, step._source === 'test' ? 'test' : 'debug');
+}
+
+function _toDisplayLine(lineNumber, editorKey) {
+    return (isDebugStrand() && editorKey === 'test')
+        ? lineNumber - _runnerLineOffset
+        : lineNumber;
 }
 
 /** @return {number} index of the first step sitting on a breakpoint, or the last step if none. */
@@ -491,29 +566,33 @@ function _enableDebugHighlight() {
     }
 }
 
-function debugStepPrev() {
+function debugStepPrev(source = 'button') {
     if (_debugSteps && _debugStepIndex > 0) {
         _enableDebugHighlight();
         _debugStepIndex--;
+        trackClientEvent('debug-step-prev', {step: _debugStepIndex + 1, source});
         _renderCurrentStep();
     }
 }
 
-function debugStepNext() {
+function debugStepNext(source = 'button') {
     if (_debugSteps && _debugStepIndex < _debugSteps.length - 1) {
         _enableDebugHighlight();
         _debugStepIndex++;
+        trackClientEvent('debug-step-next', {step: _debugStepIndex + 1, source});
         _renderCurrentStep();
     }
 }
 
 // Jump to the next breakpoint; at the end switch to the results tab
-function debugContinue() {
+function debugContinue(source = 'button') {
     if (!_debugSteps) return;
     if (_debugStepIndex === _debugSteps.length - 1) {
+        trackClientEvent('debug-continue', {reachedResults: true, source});
         switchTab('results');
         return;
     }
+    trackClientEvent('debug-continue', {reachedResults: false, fromStep: _debugStepIndex + 1, source});
     _enableDebugHighlight();
     for (let i = _debugStepIndex + 1; i < _debugSteps.length; i++) {
         const s = _debugSteps[i];
@@ -577,15 +656,15 @@ document.addEventListener('keydown', ev => {
     if (ev.target instanceof Element && ev.target.closest('.monaco-editor')) return;
     if (ev.key === 'ArrowLeft') {
         ev.preventDefault();
-        debugStepPrev();
+        debugStepPrev('keyboard');
     }
     if (ev.key === 'ArrowRight') {
         ev.preventDefault();
-        debugStepNext();
+        debugStepNext('keyboard');
     }
     if (ev.key === 'ArrowDown') {
         ev.preventDefault();
-        debugContinue();
+        debugContinue('keyboard');
     }
 });
 
@@ -595,6 +674,7 @@ let _coverageHighlightOn = true;
 function toggleCoverageHighlight() {
     _coverageHighlightOn = !_coverageHighlightOn;
     document.getElementById('toggle-coverage-btn').classList.toggle('is-on', _coverageHighlightOn);
+    trackClientEvent('debug-toggle-coverage', {on: _coverageHighlightOn});
     _applyCoverageDecorations();
 }
 
@@ -604,6 +684,7 @@ let _debugHighlightOn = true;
 function toggleDebugHighlight() {
     _debugHighlightOn = !_debugHighlightOn;
     document.getElementById('toggle-debug-btn').classList.toggle('is-on', _debugHighlightOn);
+    trackClientEvent('debug-toggle-highlight', {on: _debugHighlightOn});
     if (_debugHighlightOn && _debugSteps) _renderCurrentStep();
     else _highlightDebugLine(null);
 }
@@ -649,6 +730,7 @@ function setDebuggerTabVisible(visible) {
  * @param {boolean} showDebugTrace
  */
 function renderTestResultObject(obj, showDebugTrace = false) {
+    _updateExecutableLines(obj.executableLines);
     renderCoverage(obj.coverage);
     renderLogs(obj.logs);
 
@@ -724,7 +806,8 @@ function onContentChangedCut() {
     updateResetButtonState(currentComponent);
 }
 
-function closeEditor() {
+function closeEditor(source = 'button') {
+    trackDebugEvent('debug-editor-closed', {source});
     if (currentComponent) save(currentComponent); // auto save on close
     if (isDebugStrand()) window.objectiveDisplay?.setInteractionOpen(false);
     currentComponent = false;
@@ -734,7 +817,8 @@ function closeEditor() {
     _hideStepper();
 }
 
-document.getElementById('editor-close-btn').addEventListener('click', closeEditor);
+// wrapped so the click Event isn't forwarded as the `source` argument
+document.getElementById('editor-close-btn').addEventListener('click', () => closeEditor());
 
 const execBtn = document.getElementById('editor-execute-btn');
 const debugBtn = document.getElementById('editor-debug-btn');
@@ -832,6 +916,7 @@ execBtn.addEventListener('click', () => execute(false));
 debugBtn.addEventListener('click', () => execute(true));
 
 async function executeRunner(componentName, debug = false) {
+    trackClientEvent(debug ? 'debug-debug-clicked' : 'debug-run-clicked');
     renderResult(debug ? '<p>Debugging...</p>' : '<p>Running...</p>');
     setExecuteDisabled(true);
 
@@ -870,6 +955,7 @@ async function executeRunner(componentName, debug = false) {
 
 function renderDebugRunResult(obj, showDebug = false) {
     _runnerLineOffset = obj.runnerLineOffset ?? 0;
+    _updateExecutableLines(obj.executableLines);
     renderLogs(obj.logs);
 
     let r = obj.hiddenTestsPassed
@@ -912,7 +998,15 @@ async function resetCut() {
     const currentComponentData = await getComponentData(componentName, true, !isDebugStrand());
     const resetCutButton = document.getElementById('editor-reset-cut-btn');
 
+    // The popup's default CTA ("Keep my changes") is the cancel path; track it unless
+    // the Reset button below fires first and cancels this listener.
+    const continueButton = document.getElementById('continue-button');
+    const trackCancelled = () => trackDebugEvent('debug-reset-cut-clicked', {confirmed: false});
+    continueButton.addEventListener('click', trackCancelled, {once: true});
+
     Popup.instance.open('reset cut').addButton('Reset', () => {
+        continueButton.removeEventListener('click', trackCancelled);
+        trackDebugEvent('debug-reset-cut-clicked', {confirmed: true});
         Popup.instance.open('wait', {'for': 'Resetting the class under test'});
         fetch(`${apiUrl}/components/${componentName}/cut/reset`, {headers: jsonHeader, method: 'POST'})
             .then(res => {
@@ -1044,13 +1138,16 @@ window.setPuzzleOpen = function (open) {
 
 window.openEditor = async function (componentName) {
     // Check if the introduction should be shown. Then show it immediately, so the user can read it while the editor is still loading.
-    Settings.instance.get(Settings.keys.codeEditorIntroductionShown).then(introductionShown => {
-        if (!introductionShown) {
-            Popup.instance.open('code editor introduction').onClose(() => {
-                Settings.instance.set(Settings.keys.codeEditorIntroductionShown, true);
-            });
-        }
-    });
+    // Debug strand has its own per-room intro popup (see below) and never shows this testing-strand one.
+    if (!isDebugStrand()) {
+        Settings.instance.get(Settings.keys.codeEditorIntroductionShown).then(introductionShown => {
+            if (!introductionShown) {
+                Popup.instance.open('code editor introduction').onClose(() => {
+                    Settings.instance.set(Settings.keys.codeEditorIntroductionShown, true);
+                });
+            }
+        });
+    }
 
     const activateButton = document.getElementById('editor-activate-test-btn');
     const resetCutButton = document.getElementById('editor-reset-cut-btn');
@@ -1093,7 +1190,10 @@ window.openEditor = async function (componentName) {
         window.editors.monaco.test.setValue(runnerCode);
         window.testClassName = 'DebugRunner';
         // fully editable: drop any leftover constraints from a prior testing session
-        window.editors.restricted.test?.removeRestrictionsIn(window.editors.monaco.test.getModel());
+        const testModel = window.editors.monaco.test.getModel();
+        if (testModel._isRestrictedModel) {
+            window.editors.restricted.test?.removeRestrictionsIn(testModel);
+        }
     } else {
         window.editors.monaco.test.setValue(currentComponentData.test.sourceCode);
         constrain(currentComponentData.test.editable, 'test');
@@ -1202,7 +1302,10 @@ es.registerHandler(
         const data = await getComponentData(evt.componentName);
         componentData.set(evt.componentName, data);
         window.unityInstance.SendMessage('BrowserInterface', 'OnComponentFixed', evt.componentName);
-        Popup.instance.open('component fixed').onTransitionEnd(closeEditor);
+        const popup = isDebugStrand()
+            ? Popup.instance.openDebugComponentFixed(evt.componentName)
+            : Popup.instance.open('component fixed');
+        popup.onTransitionEnd(closeEditor);
     }
 );
 es.registerHandler(
@@ -1211,10 +1314,30 @@ es.registerHandler(
         document.getElementById('unity-canvas').focus();
     })
 );
+// Set when the server reports the game finished. In the debug strand the popup is held back
+// until Unity has played its epilogue dialogue (window.onEpilogueFinished below), otherwise the
+// 'component fixed' popup (opened async, after getComponentData) would overwrite it right away.
+let gameFinished = false;
+
+function endSession() {
+    const popup = Popup.instance.open(isDebugStrand() ? 'game finished debug' : 'game finished');
+    popup.onTransitionEnd(() => window.location.replace('/'));
+}
+
 es.registerHandler(
     'GameFinishedEvent',
-    () => void Popup.instance.open('game finished')
+    () => {
+        gameFinished = true;
+        if (!isDebugStrand()) endSession();
+    }
 );
+
+// Unity calls this (via the jslib) once the final room's epilogue dialogue is over.
+window.onEpilogueFinished = function () {
+    if (!gameFinished) return;
+    gameFinished = false;
+    endSession();
+};
 
 document.addEventListener('keydown', e => {
     const ctrlOrCmd = e.ctrlKey || e.metaKey;
@@ -1222,6 +1345,7 @@ document.addEventListener('keydown', e => {
     if (ctrlOrCmd && e.key === 's') {
         e.preventDefault();
         if (editorOpen) {
+            trackDebugEvent('debug-save-shortcut', {source: 'keyboard'});
             save(currentComponent);
         } else {
             console.log('Editor closed, not saving.');
@@ -1236,7 +1360,7 @@ document.addEventListener('keydown', e => {
     if (e.key === 'Escape') {
         if (editorOpen) {
             e.preventDefault();
-            closeEditor();
+            closeEditor('keyboard');
         }
     }
 });

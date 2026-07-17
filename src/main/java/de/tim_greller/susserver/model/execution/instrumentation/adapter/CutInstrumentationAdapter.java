@@ -13,6 +13,17 @@ import org.springframework.asm.Type;
 
 public class CutInstrumentationAdapter extends ClassVisitor {
 
+    // Fields share the tracker's variable state with the locals, which are keyed "method/name".
+    // Qualifying the field keeps a field and a same-named local apart, and reads like an IDE.
+    private static String qualifiedFieldName(final int opcode, final String owner, final String name) {
+        if (opcode == Opcodes.PUTFIELD) {
+            return "this." + name;
+        }
+        final String simpleName = owner.substring(owner.lastIndexOf('/') + 1);
+        final int userSuffix = simpleName.indexOf('#');
+        return (userSuffix < 0 ? simpleName : simpleName.substring(0, userSuffix)) + "." + name;
+    }
+
     private final String classId;
 
     public CutInstrumentationAdapter(final ClassWriter pClassWriter, final String pClassId) {
@@ -29,7 +40,7 @@ public class CutInstrumentationAdapter extends ClassVisitor {
             final String[] pExceptions) {
         final MethodVisitor mv = super.visitMethod(pAccess, pMethodName, pDescriptor, pSignature, pExceptions);
         //moved to super class due to duplicate code
-        return new VarTrackingMethodVisitor(ASM7, mv, classId, pMethodName) {
+        return new VarTrackingMethodVisitor(ASM7, mv, classId, pMethodName, pAccess, pDescriptor) {
             @Override
             public void visitLineNumber(final int pLine, final Label pStart) {
                 InstrumentationTracker.trackLine(pLine, classId);
@@ -77,7 +88,7 @@ public class CutInstrumentationAdapter extends ClassVisitor {
                         visitInsn(opcode == Opcodes.PUTFIELD ? Opcodes.DUP_X1 : Opcodes.DUP);
                     }
                     super.visitFieldInsn(opcode, owner, name, desc);
-                    visitLdcInsn(name);
+                    visitLdcInsn(qualifiedFieldName(opcode, owner, name));
                     visitLdcInsn(classId);
                     visitLdcInsn(pMethodName);
                     boolean isBool = desc.equals("Z");

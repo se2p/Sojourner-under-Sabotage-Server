@@ -15,6 +15,7 @@ import static de.tim_greller.susserver.dto.GameProgressStatus.TESTS_ACTIVE;
 
 import de.tim_greller.susserver.dto.GameMode;
 import de.tim_greller.susserver.dto.GameProgressStatus;
+import de.tim_greller.susserver.dto.GameProgressionChangeDTO;
 import de.tim_greller.susserver.dto.UserGameProgressionDTO;
 import de.tim_greller.susserver.events.ComponentDestroyedEvent;
 import de.tim_greller.susserver.events.ComponentFixedEvent;
@@ -27,6 +28,7 @@ import de.tim_greller.susserver.events.GameStartedEvent;
 import de.tim_greller.susserver.events.MutatedComponentTestsFailedEvent;
 import de.tim_greller.susserver.events.PuzzleSolvedEvent;
 import de.tim_greller.susserver.events.RoomUnlockedEvent;
+import de.tim_greller.susserver.events.TempleEnteredEvent;
 import de.tim_greller.susserver.persistence.entity.GameProgressionEntity;
 import de.tim_greller.susserver.persistence.entity.UserEntity;
 import de.tim_greller.susserver.persistence.entity.UserGameProgressionEntity;
@@ -37,6 +39,7 @@ import de.tim_greller.susserver.service.auth.UserService;
 import de.tim_greller.susserver.service.execution.CutService;
 import de.tim_greller.susserver.service.execution.DebugMainService;
 import de.tim_greller.susserver.service.execution.TestService;
+import de.tim_greller.susserver.service.tracking.UserEventTrackingService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -56,6 +59,7 @@ public class GameProgressionService {
     private final EventService eventService;
     private final UserSettingsService userSettingsService;
     private final ActiveGameModeService activeModeService;
+    private final UserEventTrackingService trackingService;
 
 
     // Instantiated by the Spring IoC container during startup even if not injected anywhere.
@@ -65,7 +69,7 @@ public class GameProgressionService {
                            ComponentStatusService componentStatusService, AttackService attackService,
                            TestService testService, DebugMainService debugMainService, CutService cutService,
                            UserService userService, UserSettingsService userSettingsService,
-                           ActiveGameModeService activeModeService) {
+                           ActiveGameModeService activeModeService, UserEventTrackingService trackingService) {
         this.userGameProgressionRepository = userGameProgressionRepository;
         this.gameProgressionRepository = gameProgressionRepository;
         this.componentStatusService = componentStatusService;
@@ -77,6 +81,7 @@ public class GameProgressionService {
         this.eventService = eventService;
         this.userSettingsService = userSettingsService;
         this.activeModeService = activeModeService;
+        this.trackingService = trackingService;
 
         eventService.registerHandler(GameStartedEvent.class, this::handleGameStarted);
         eventService.registerHandler(RoomUnlockedEvent.class, this::handleRoomUnlocked);
@@ -87,6 +92,7 @@ public class GameProgressionService {
         eventService.registerHandler(DebugStartEvent.class, this::handleDebugStart);
         eventService.registerHandler(ComponentFixedEvent.class, this::handleComponentFixed);
         eventService.registerHandler(PuzzleSolvedEvent.class, this::handlePuzzleSolved);
+        eventService.registerHandler(TempleEnteredEvent.class, this::handleTempleEntered);
     }
 
     public void handleComponentTestsActivated(ComponentTestsActivatedEvent event) {
@@ -98,7 +104,7 @@ public class GameProgressionService {
         if (componentStatusService.handleComponentTestsActivated(event)) {
             userGameProgression.setStatus(TESTS_ACTIVE);
             userGameProgressionRepository.save(userGameProgression);
-            changeGameProgression(userGameProgression);
+            changeGameProgression(userGameProgression, TEST);
             gameLoop(userGameProgression);
         }
     }
@@ -114,6 +120,8 @@ public class GameProgressionService {
                     return initGameProgression(user, mode);
                 });
 
+        final var statusBeforeGameStart = gameProgression.getStatus();
+
         // handle TESTS_ACTIVE state
         gameLoop(gameProgression);
 
@@ -125,7 +133,8 @@ public class GameProgressionService {
             attackService.attackCut(gameProgression.getGameProgression().getComponent().getName());
         } else {
             // Re-fetch: gameLoop may have attacked the component and advanced the status meanwhile.
-            changeGameProgression(userGameProgressionRepository.findById(currentUserModeKey()).orElseThrow());
+            changeGameProgression(userGameProgressionRepository.findById(currentUserModeKey()).orElseThrow(),
+                    statusBeforeGameStart);
         }
     }
 
@@ -160,11 +169,12 @@ public class GameProgressionService {
         }
         var newProgression = newProgressionOpt.get();
 
+        final var previousStatus = userProgress.getStatus();
         userProgress.setGameProgression(newProgression);
         var nextRoomStatus = isDebugging(userProgress) || newProgression.getStage() == 1 ? DOOR : TESTS_ACTIVE;
         userProgress.setStatus(nextRoomStatus);
         userGameProgressionRepository.save(userProgress);
-        changeGameProgression(userProgress);
+        changeGameProgression(userProgress, previousStatus);
         log.info("componentFixedEvent changed game progression to: {}", newProgression);
 
         // Set the component stage
@@ -178,16 +188,27 @@ public class GameProgressionService {
         if (gameProgression.getStatus() == DOOR && roomIdMatches) {
             gameProgression.setStatus(TALK);
             userGameProgressionRepository.save(gameProgression);
-            changeGameProgression(gameProgression);
+            changeGameProgression(gameProgression, DOOR);
         }
     }
 
     private void handleConversationFinished(ConversationFinishedEvent conversationFinishedEvent) {
         UserGameProgressionEntity userGameProgression = userGameProgressionRepository.findById(currentUserModeKey()).orElseThrow();
-        if (userGameProgression.getStatus() == TALK) {
-            userGameProgression.setStatus(isDebugging(userGameProgression) ? PUZZLE : TEST);
+        // Debug strand: TALK covers the whole planet-outside phase and only ends when the player
+        // walks into the temple (TempleEnteredEvent), not when the arrival conversation ends.
+        if (userGameProgression.getStatus() == TALK && !isDebugging(userGameProgression)) {
+            userGameProgression.setStatus(TEST);
             userGameProgressionRepository.save(userGameProgression);
-            changeGameProgression(userGameProgression);
+            changeGameProgression(userGameProgression, TALK);
+        }
+    }
+
+    private void handleTempleEntered(TempleEnteredEvent templeEnteredEvent) {
+        var gameProgression = userGameProgressionRepository.findById(currentUserModeKey()).orElseThrow();
+        if (isDebugging(gameProgression) && gameProgression.getStatus() == TALK) {
+            gameProgression.setStatus(PUZZLE);
+            userGameProgressionRepository.save(gameProgression);
+            changeGameProgression(gameProgression, TALK);
         }
     }
 
@@ -196,7 +217,7 @@ public class GameProgressionService {
         if (isDebugging(gameProgression) && gameProgression.getStatus() == PUZZLE) {
             gameProgression.setStatus(DEBUGGING);
             userGameProgressionRepository.save(gameProgression);
-            changeGameProgression(gameProgression);
+            changeGameProgression(gameProgression, PUZZLE);
         }
     }
 
@@ -206,7 +227,7 @@ public class GameProgressionService {
         if (gameProgression.getStatus() == TESTS_ACTIVE && componentMatches) {
             gameProgression.setStatus(targetStatus);
             userGameProgressionRepository.save(gameProgression);
-            changeGameProgression(gameProgression);
+            changeGameProgression(gameProgression, TESTS_ACTIVE);
         }
     }
 
@@ -222,9 +243,10 @@ public class GameProgressionService {
         var gameProgression = userGameProgressionRepository.findById(currentUserModeKey()).orElseThrow();
         var componentMatches = gameProgression.getGameProgression().getComponent().getName().equals(debugStartEvent.getComponentName());
         if (gameProgression.getStatus().readyForDebugging() && componentMatches) {
+            final var previousStatus = gameProgression.getStatus();
             gameProgression.setStatus(DEBUGGING);
             userGameProgressionRepository.save(gameProgression);
-            changeGameProgression(gameProgression);
+            changeGameProgression(gameProgression, previousStatus);
         }
     }
 
@@ -258,9 +280,10 @@ public class GameProgressionService {
     }
 
     public UserGameProgressionEntity initGameProgression(UserEntity user, GameMode mode) {
+        var initialStatus = GameMode.Debugging.equals(mode) ? DOOR : TALK;
         var gameProgression = UserGameProgressionEntity.builder()
                 .gameProgression(firstProgressionOf(mode))
-                .status(TALK)
+                .status(initialStatus)
                 .id(new UserModeKey(user, mode))
                 .build();
         return userGameProgressionRepository.save(gameProgression);
@@ -305,7 +328,20 @@ public class GameProgressionService {
                 .build();
     }
 
-    private void changeGameProgression(UserGameProgressionEntity ugp) {
+    private void changeGameProgression(UserGameProgressionEntity ugp, GameProgressStatus previousStatus) {
+        trackingService.trackEvent("game-progression-changed", toChangeDTO(ugp, previousStatus));
         eventService.publishEvent(new GameProgressionChangedEvent(toDTO(ugp)));
+    }
+
+    private GameProgressionChangeDTO toChangeDTO(UserGameProgressionEntity ugp, GameProgressStatus previousStatus) {
+        return GameProgressionChangeDTO.builder()
+                .orderIndex(ugp.getGameProgression().getOrderIndex())
+                .room(ugp.getGameProgression().getRoomId())
+                .stage(ugp.getGameProgression().getStage())
+                .componentName(ugp.getGameProgression().getComponent().getName())
+                .previousStatus(previousStatus)
+                .status(ugp.getStatus())
+                .mode(ugp.getMode() == null ? GameMode.Testing : ugp.getMode())
+                .build();
     }
 }

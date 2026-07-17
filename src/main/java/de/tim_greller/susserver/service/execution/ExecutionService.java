@@ -194,6 +194,7 @@ public class ExecutionService {
         dto.setDebugTrace(iTracker.getDebugTraceForUser(userId));
         dto.setCoveredLines(mapMap(iTracker.getCoveredLinesForUser(userId), (k, v) -> v.size()));
         dto.setTotalLines(mapMap(iTracker.getLinesForUser(userId), (k, v) -> v.size()));
+        dto.setExecutableLines(iTracker.getLinesForUser(userId));
     }
     
     private record FallbackRun(TestExecutionResult result, TestRunListener listener) {}

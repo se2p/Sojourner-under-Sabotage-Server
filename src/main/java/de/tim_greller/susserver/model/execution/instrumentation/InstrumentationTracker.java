@@ -7,6 +7,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
@@ -148,16 +149,16 @@ public class InstrumentationTracker {
         classTrackers.computeIfAbsent(pClassName, k -> new ClassTracker()).trackFieldValueChanged(Boolean.toString(value != 0), fieldName);
     }
 
-    public static void trackVarDef(final int pVarIndex, final String pVarName, final String pVarDesc,
-                                   final String pClassName, final String methodName) {
-        if (classTrackers.containsKey(pClassName)) {
-            classTrackers.get(pClassName).trackVariableDefinition(pVarIndex, methodName + "/" + pVarName, pVarDesc, methodName);
-        } else {
-            final ClassTracker classTracker = new ClassTracker();
-            classTracker.trackVariableDefinition(pVarIndex, methodName + "/" + pVarName, pVarDesc, methodName);
-            classTrackers.put(pClassName, classTracker);
-        }
-        log.debug("[trackVarDef] idx={} name={} desc={} class={} method={}", pVarIndex, pVarName, pVarDesc, pClassName, methodName);
+    /**
+     * Registers which local variable slots carry which name at one step site, as resolved from the
+     * local variable table while the class was instrumented. Called at instrumentation time, not
+     * from instrumented code.
+     */
+    public static void registerStepSite(final String pClassName, final String methodName, final int siteId,
+                                        final Map<Integer, String> slotNames) {
+        classTrackers.computeIfAbsent(pClassName, k -> new ClassTracker())
+                .trackStepSite(methodName + "/" + siteId, slotNames);
+        log.debug("[registerStepSite] class={} method={} site={} names={}", pClassName, methodName, siteId, slotNames);
     }
 
     public static void trackLog(String message, String pClassName, String methodName) {
@@ -167,13 +168,14 @@ public class InstrumentationTracker {
 
     // Called on every line visit: assigns a global per-user step index and snapshots the current variable state
     @SuppressWarnings("unused")
-    public static void trackDebugStep(final int pLineNumber, final String pClassName, final String methodName) {
+    public static void trackDebugStep(final int pLineNumber, final String pClassName, final String methodName,
+                                      final int siteId) {
         final String userId = pClassName.contains("#")
                 ? pClassName.substring(pClassName.lastIndexOf('#') + 1)
                 : "";
         final int globalIdx = userStepCounters.computeIfAbsent(userId, k -> new AtomicInteger()).getAndIncrement();
         classTrackers.computeIfAbsent(pClassName, k -> new ClassTracker())
-                .captureDebugStep(pLineNumber, methodName, globalIdx);
+                .captureDebugStep(pLineNumber, methodName, siteId, globalIdx);
     }
 
     @SuppressWarnings("unused")
@@ -251,10 +253,12 @@ public class InstrumentationTracker {
         private String currentTestMethod = null;
         private final Map<Integer, Integer> visitedLines = new TreeMap<>();
         private final Set<Integer> lines = new HashSet<>();
-        private final Map<String, String[]> currentIndexToVarNameAndDescriptor = new TreeMap<>();
         private final Map<Integer, Map<String, Object>> vars = new TreeMap<>();
         private final List<LogEntry> logs = new LinkedList<>();
+        // Locals keyed "method/slot", fields keyed by their qualified display name ("this.x").
+        // Slots, not names: which name a slot carries depends on the step site, see captureDebugStep.
         private final Map<String, Object> liveVarState = new LinkedHashMap<>();
+        private final Map<String, Map<Integer, String>> stepSites = new HashMap<>();
         private final List<DebugStep> debugTrace = new ArrayList<>();
 
         void visitLine(final int pLineNumber) {
@@ -271,32 +275,33 @@ public class InstrumentationTracker {
         }
 
         void trackVariableValueChanged(final Object value, final int pVarIndex, final String methodName) {
-            String varId = methodName + "/" + pVarIndex;
-            if (!currentIndexToVarNameAndDescriptor.containsKey(varId)) {
-                log.debug("No var def found for {}", varId);
-                return;
-            }
-            String varName = currentIndexToVarNameAndDescriptor.get(varId)[0];
-            log.debug("[trackVar] FOUND varId={} varName={} value={}", varId, varName, value);
-            if (vars.containsKey(lastVisitedLine)) {
-                vars.get(lastVisitedLine).put(varName, value);
-            } else {
-                final Map<String, Object> varMap = new TreeMap<>();
-                varMap.put(varName, value);
-                vars.put(lastVisitedLine, varMap);
-            }
-            liveVarState.put(varName, value);
+            liveVarState.put(methodName + "/" + pVarIndex, value);
         }
 
-        // Append a DebugStep snapshotting every currently live variable for this line
-        void captureDebugStep(final int lineNumber, final String methodName, final int globalIndex) {
-            Map<String, DebugValue> snapshot = new LinkedHashMap<>();
-            liveVarState.forEach((qualifiedName, value) -> {
-                String shortName = qualifiedName.contains("/")
-                        ? qualifiedName.substring(qualifiedName.lastIndexOf('/') + 1)
-                        : qualifiedName;
-                snapshot.put(shortName, toDebugValue(value));
+        void trackStepSite(final String siteKey, final Map<Integer, String> slotNames) {
+            stepSites.put(siteKey, slotNames);
+        }
+
+        // Append a DebugStep snapshotting what is actually in scope on this line: the fields, plus
+        // the locals whose scope covers this step site. A slot outside every scope here holds either
+        // a local of another method (nothing was ever popped, this map has no frames) or a value the
+        // compiler parked in a synthetic slot; neither is nameable here, so neither is shown.
+        void captureDebugStep(final int lineNumber, final String methodName, final int siteId, final int globalIndex) {
+            final Map<String, DebugValue> snapshot = new LinkedHashMap<>();
+            liveVarState.forEach((key, value) -> {
+                if (!key.contains("/")) {
+                    // A field, already qualified as "this.name" or "Type.name" by the instrumentation.
+                    snapshot.put(key, toDebugValue(value));
+                }
             });
+            stepSites.getOrDefault(methodName + "/" + siteId, Map.of()).forEach((slot, name) -> {
+                final String key = methodName + "/" + slot;
+                if (liveVarState.containsKey(key)) {
+                    snapshot.put(name, toDebugValue(liveVarState.get(key)));
+                }
+            });
+            vars.computeIfAbsent(lineNumber, k -> new TreeMap<>())
+                    .putAll(mapMap(snapshot, (name, value) -> value.preview()));
             log.debug("[captureDebugStep] line={} method={} liveVars={} snapshot={}", lineNumber, methodName, liveVarState.size(), snapshot);
             debugTrace.add(new DebugStep(globalIndex, stepIndex++, lineNumber, methodName, currentTestMethod, snapshot));
         }
@@ -492,11 +497,6 @@ public class InstrumentationTracker {
             liveVarState.put(fieldName, value);
         }
 
-        void trackVariableDefinition(final int pVarIndex, final String pVarName, String pVarDesc, final String methodName) {
-            String varId = methodName + "/" + pVarIndex;
-            currentIndexToVarNameAndDescriptor.put(varId, new String[]{pVarName, pVarDesc});
-        }
-
         void trackLog(String message, String methodName) {
             logs.add(new LogEntry(logIndex++, message, methodName, lastVisitedLine, currentTestMethod));
         }
@@ -508,7 +508,6 @@ public class InstrumentationTracker {
         public void clear() {
             visitedLines.clear();
             lines.clear();
-            currentIndexToVarNameAndDescriptor.clear();
             vars.clear();
             logs.clear();
             liveVarState.clear();
