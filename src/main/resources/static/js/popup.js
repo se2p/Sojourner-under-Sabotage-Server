@@ -130,18 +130,28 @@ class Popup {
                 cta: 'Next',
             },
             {
-                title: 'The Runner',
-                content: `<p>The editor on the left is the <strong>class under test (CUT)</strong> -
-                          the ArtifactAnalyzer's code. It has to stay intact, you can't just delete parts to proceed.</p>
-                          <p>The editor on the right is a <strong>runner</strong>. You can edit it freely and run it to
-                          see where things go wrong. Every run trips the same failure - a bug you can reproduce at
-                          will is already half caught. This first one is already written out for you: it calls the six
-                          steps one by one, keeps what each returns in its own variable, and notes underneath what
-                          each one <em>should</em> return. Find the first line where the two disagree. You don't
-                          have to check them all in order: Splitting the code into segments with breakpoints is a good starting point.
-                          to suspect.</p>
-                          <p>Watch how it does that - the later machines hand you less and less of it, until you
-                          decide for yourself what to observe.</p>`,
+                title: 'The Left Editor',
+                content: `<p>The editor on the left holds the <strong>class under test (CUT)</strong> -
+                          the ArtifactAnalyzer's code, bug included. This is where your fix goes.</p>
+                          <p>You can edit it, but the class has to <strong>stay intact</strong>: it must remain a
+                          complete, working component. Deleting or gutting code to dodge the bug won't get you
+                          through - hidden tests check that the analyzer still does its job.</p>`,
+                cta: 'Next',
+            },
+            {
+                title: 'The Right Editor',
+                content: `<p>The editor on the right is a <strong>runner</strong> - your scratch pad. What it
+                          contains is entirely up to you, as long as it has no programming errors: on Run or
+                          Debug it is compiled and executed top to bottom.</p>
+                          <p>This first runner already calls the analyzer's six steps one by one, with a comment
+                          under each stating what it <em>should</em> return. Four of them share a single
+                          variable that gets overwritten every time, so the debugger only ever shows you its latest
+                          value - to catch an earlier one, stop execution on that exact line before the next step
+                          overwrites it.</p>
+                          <p>You don't have to check all six steps one by one: splitting the chain into halves
+                          with breakpoints is a good starting point. The comments are your map for this first
+                          machine - the later ones hand you less and less, until you decide for yourself what
+                          to observe.</p>`,
                 cta: 'Next',
             },
             {
@@ -163,11 +173,14 @@ class Popup {
                       for the night while the power - and with it the air scrubber - is down. Its self-test just
                       failed: at the end of the cycle the vent is still open, and the power flag reads true again
                       on its own.</p>
-                      <p>The bay still logs its state after every step, so the observing is done for you. Working out
-                      what those states are <em>supposed</em> to be is not: the runner leaves you the lines to fill
-                      in. Predict first, then run and compare, the way you did in the temple. Find the first step that
-                      disagrees with your prediction, fix it, then hit <strong>Run</strong> to confirm the fix against
-                      the hidden tests.</p>`,
+                      <p>The runner still reads the bay's state after every step, so the observing is done for you -
+                      but it keeps only the latest reading, not the whole day: the two variables get overwritten
+                      every time. Working out what those states are <em>supposed</em> to be at each point is not
+                      done for you: the runner leaves you the lines to fill in. Step through with <strong>Debug</strong>
+                      and track both values as the cycle runs, the way you tracked state in the temple. Find the
+                      first step where one of them turns into something it shouldn't, fix it, then hit <strong>Run</strong>
+                      to confirm the fix against the
+                      hidden tests.</p>`,
             cta: 'Start Debugging',
         }],
         [3, {
@@ -176,7 +189,7 @@ class Popup {
                       to the sprout in the growth bay. The sample doesn't react at all: the dose comes out
                       inert.</p>
                       <p>This bay logs nothing, and the runner only shows you the failure. Which steps you look at,
-                      and whether you print them or step through them with a breakpoint, is up to you now. Follow the
+                      and where you set your breakpoints, is up to you now. Follow the
                       dose back through the steps that built it, the way you followed each ingredient back to its
                       source in the temple, then hit <strong>Run</strong> to confirm the fix against the hidden
                       tests.</p>`,

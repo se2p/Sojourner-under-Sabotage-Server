@@ -93,7 +93,11 @@ public class ExecutionService {
             throws NotFoundException, ClassLoadException, TestExecutionException {
         boolean passed;
         try {
-            passed = runHiddenTests(componentName, userId).result().wasSuccessful();
+            var fallback = runHiddenTests(componentName, userId);
+            passed = fallback.result().wasSuccessful();
+            if (!passed) {
+                logFailingHiddenTests(componentName, fallback.listener());
+            }
         } catch (CompilationException e) {
             log.info("Hidden tests for component {} no longer compile: {}", componentName, e.getMessage());
             clientResultDto.setHiddenTestsPassed(false);
@@ -111,6 +115,24 @@ public class ExecutionService {
         if (passed) {
             eventService.publishAndHandleEvent(new ComponentFixedEvent(componentName));
         }
+    }
+
+    // Server-side only: the player must not learn which hidden test failed, but without this the
+    // verdict is a bare boolean and a failing fix can't be diagnosed.
+    private void logFailingHiddenTests(String componentName, TestRunListener listener) {
+        listener.getMap().forEach((methodName, details) -> {
+            if (details.getTestStatus() != FAILED) {
+                return;
+            }
+            // expected/actual are only set for assertion failures; anything else (e.g. a SecurityException
+            // from the sandbox) carries its information in the trace alone.
+            var assertion = details.getExpectedTestResult() == null
+                    ? "no assertion failure"
+                    : "expected <" + details.getExpectedTestResult() + "> but was <"
+                            + details.getActualTestResult() + ">";
+            log.info("Hidden test {}.{} failed ({}):\n{}",
+                    componentName, methodName, assertion, details.getTrace());
+        });
     }
 
     public TestExecutionResultDTO execute(String componentName, String userId)

@@ -3,7 +3,7 @@ public class ArtifactAnalyzer {
     // The scanner's optical sensor reports a raw exposure
     // reading between 0 and SENSOR_MAX. A single scan pass
     // takes several readings in a row.
-    private static final int SENSOR_MAX = 1023;
+    private static final double SENSOR_MAX = 1023.0;
 
     // Readings below this value are sensor dropouts and do
     // not carry any exposure information.
@@ -20,16 +20,16 @@ public class ArtifactAnalyzer {
     // Step 1: drop the dropouts, keep the usable readings.
     public int[] filterDropouts(int[] readings) {
         int count = 0;
-        for (int reading : readings) {
-            if (reading >= MIN_VALID_READING) {
+        for (int i = 0; i < readings.length; i++) {
+            if (readings[i] >= MIN_VALID_READING) {
                 count++;
             }
         }
         int[] filtered = new int[count];
         int index = 0;
-        for (int reading : readings) {
-            if (reading >= MIN_VALID_READING) {
-                filtered[index] = reading;
+        for (int i = 0; i < readings.length; i++) {
+            if (readings[i] >= MIN_VALID_READING) {
+                filtered[index] = readings[i];
                 index++;
             }
         }
@@ -38,18 +38,18 @@ public class ArtifactAnalyzer {
 
     // Step 2: condense the usable readings of one scan pass
     // into a single exposure reading.
-    public int averageReading(int[] readings) {
+    public double averageReading(int[] readings) {
         int sum = 0;
-        for (int reading : readings) {
-            sum += reading;
+        for (int i = 0; i < readings.length; i++) {
+            sum = sum + readings[i];
         }
         return sum / (readings.length + 1);
     }
 
     // Step 3: scale the reading (0..SENSOR_MAX) down to a
     // 0.0..1.0 fraction.
-    public double normalize(int reading) {
-        return reading / (double) SENSOR_MAX;
+    public double normalize(double reading) {
+        return reading / SENSOR_MAX;
     }
 
     // Step 4: apply the calibration. The sensor reads
@@ -70,20 +70,15 @@ public class ArtifactAnalyzer {
     // scan-quality band. Only a "SHARP" scan is good enough
     // to decode the engravings on an artifact.
     public String classify(double percent) {
-        if (percent < 16.0) return "UNDEREXPOSED";
-        if (percent < 19.5) return "FAINT";
-        if (percent <= 23.5) return "SHARP";
+        if (percent < 16.0) {
+            return "UNDEREXPOSED";
+        }
+        if (percent < 19.5) {
+            return "FAINT";
+        }
+        if (percent <= 23.5) {
+            return "SHARP";
+        }
         return "OVEREXPOSED";
-    }
-
-    // Full pipeline: the raw readings of one scan pass become
-    // a scan-quality classification.
-    public String analyze(int[] rawReadings) {
-        int[] readings = filterDropouts(rawReadings);
-        int average = averageReading(readings);
-        double normalized = normalize(average);
-        double calibrated = calibrate(normalized);
-        double percent = toPercent(calibrated);
-        return classify(percent);
     }
 }

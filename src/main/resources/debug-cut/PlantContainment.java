@@ -69,6 +69,9 @@ public class PlantContainment {
 
     // The sample only responds to an active dose.
     public boolean checkSampleResponse(String dose) {
-        return dose.equals("DOSE_ACTIVE");
+        if (dose.equals("DOSE_ACTIVE")) {
+            return true;
+        }
+        return false;
     }
 }

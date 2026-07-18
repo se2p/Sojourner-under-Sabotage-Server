@@ -111,9 +111,11 @@ class ObjectiveDisplay extends OffViewportInfo {
                         details: '<p>Same idea as the leaking pipes: the analyzer\'s scan reading flows through six ' +
                             'steps, and one of them corrupts it. From the outside you only see the wrong result at ' +
                             'the very end.</p><p>' +
-                            'The runner on the right already keeps what every step returns in its own variable, and ' +
-                            'notes underneath what it should return. Press <em>Debug</em> and step through the run ' +
-                            'to find the first step that disagrees. Fastest is to check the middle first: every check halves the search. Click ' +
+                            'The runner on the right already calls all six steps, with a note underneath each for ' +
+                            'what it should return - but four of them share one variable that keeps ' +
+                            'getting overwritten, so the debugger only shows you its latest value. Press <em>Debug</em> ' +
+                            'and stop on the exact line you want to check before the next step overwrites it. Fastest ' +
+                            'is to check the middle first: every check halves the search. Click ' +
                             'left of a line number to set a breakpoint and stop right there.</p><p>' +
                             'Fix that step in the code on the left, then press <em>Run</em>: the component is repaired ' +
                             'once the hidden tests pass.</p>',
@@ -124,10 +126,11 @@ class ObjectiveDisplay extends OffViewportInfo {
                             'through the day cycle step by step: power up, read the sensor, open the vent, night ' +
                             'mode, seal the vent. At the end the vent should be sealed and the power off - instead ' +
                             'it is still open, and the power flag flipped back on by itself.</p><p>' +
-                            'The runner on the right walks the cycle step by step and reads the bay\'s state after ' +
-                            'each one; write down what you expect first, then step through with <em>Debug</em>. Find ' +
-                            'the first step where the state stops matching what you expect - that method holds the ' +
-                            'bug. Fix it in the code on the left, then press ' +
+                            'The runner on the right reads the bay\'s power and vent state after each step, ' +
+                            'overwriting the same two variables every time. Press <em>Debug</em> and step through ' +
+                            'line by line, tracking both values as the cycle runs - the first step where one of ' +
+                            'them turns into something it shouldn\'t is where the bug lives. Fix it in the code on ' +
+                            'the left, then press ' +
                             '<em>Run</em>: the component is repaired once the hidden tests pass.</p>',
                     };
                     case 3: return {

@@ -42,7 +42,10 @@ public class TeleportBeacon {
 
     // The window only opens over a stable link.
     public boolean openDepartureWindow(String linkStatus) {
-        return linkStatus.equals("STABLE");
+        if (linkStatus.equals("STABLE")) {
+            return true;
+        }
+        return false;
     }
 
     // Full sequence: take the three readings, build the link
