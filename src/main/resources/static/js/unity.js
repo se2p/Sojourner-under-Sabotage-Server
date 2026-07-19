@@ -33,7 +33,7 @@ var config = {
     dataUrl: buildUrl + "/unity.data",
     frameworkUrl: buildUrl + "/unity.framework.js",
     codeUrl: buildUrl + "/unity.wasm",
-    streamingAssetsUrl: "StreamingAssets",
+    streamingAssetsUrl: buildUrl + "/../StreamingAssets",
     companyName: "DefaultCompany",
     productName: "SojournerUnderSabotage",
     productVersion: "0.1",

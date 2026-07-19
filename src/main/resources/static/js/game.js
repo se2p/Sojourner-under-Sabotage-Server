@@ -1321,7 +1321,7 @@ let gameFinished = false;
 
 function endSession() {
     const popup = Popup.instance.open(isDebugStrand() ? 'game finished debug' : 'game finished');
-    popup.onTransitionEnd(() => window.location.replace('/'));
+    popup.onTransitionEnd(() => window.location.replace(window.ctx));
 }
 
 es.registerHandler(
