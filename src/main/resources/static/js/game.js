@@ -52,7 +52,7 @@ document.getElementById('reset-game-button').addEventListener('click', ev => {
     ev.preventDefault();
     Popup.instance.open('reset').addButton(
         'Reset',
-        () => window.location.replace(isDebugStrand() ? '/reset-debug' : '/reset'),
+        () => window.location.replace(isDebugStrand() ? window.ctx + 'reset-debug' : window.ctx + 'reset'),
         ['clr-error']
     );
 });
@@ -60,7 +60,7 @@ document.getElementById('logout-button').addEventListener('click', ev => {
     ev.preventDefault();
     Popup.instance.open('logout').addButton(
         'Logout',
-        () => window.location.replace('/logout'),
+        () => window.location.replace(window.ctx + 'logout'),
         ['clr-error']
     );
 });
@@ -90,7 +90,7 @@ function renderResult(content) {
 
 function sessionExpired(statusInfo) {
     renderResult(`<p class="clr-error">Your session has expired.
-                <a href="/login" target="_blank" rel="noopener">Login again.</a></p>`);
+                <a href="${window.ctx}login" target="_blank" rel="noopener">Login again.</a></p>`);
     statusInfo.innerText = "Save Failed";
 }
 
@@ -853,7 +853,7 @@ const execute = async (debug = false) => {
         body: JSON.stringify({code}),
     }).then(res => {
         if (res.status === 401) {
-            renderResult(`<p class="clr-error">Your session has expired. <a href="/login">Login again.</a></p>`);
+            renderResult(`<p class="clr-error">Your session has expired. <a href="${window.ctx}login">Login again.</a></p>`);
             return;
         }
 
@@ -933,7 +933,7 @@ async function executeRunner(componentName, debug = false) {
         setExecuteDisabled(false);
 
         if (res.status === 401) {
-            renderResult(`<p class="clr-error">Your session has expired. <a href="/login">Login again.</a></p>`);
+            renderResult(`<p class="clr-error">Your session has expired. <a href="${window.ctx}login">Login again.</a></p>`);
             return;
         }
         if (!res.ok) {

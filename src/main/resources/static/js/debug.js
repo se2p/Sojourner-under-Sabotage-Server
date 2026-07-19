@@ -120,7 +120,7 @@ const execute = async (debug = false) => {
     setExecuteDisabled(false);
 
     if (res.status === 401) {
-        renderStatus('<p class="clr-error">Session expired. <a href="/login">Login again.</a></p>');
+        renderStatus(`<p class="clr-error">Session expired. <a href="${window.ctx}login">Login again.</a></p>`);
         return;
     }
     if (!res.ok) {

@@ -17,7 +17,7 @@ class EventSystem {
 
     const eventSystemInstance = this;
     const wsProtocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
-    const wsUrl = `${wsProtocol}://${window.location.host}/websocket`;
+    const wsUrl = `${wsProtocol}://${window.location.host}${window.ctx}websocket`;
     const client = new StompJs.Client({
       brokerURL: wsUrl,
       connectHeaders: window.csrfHeader,

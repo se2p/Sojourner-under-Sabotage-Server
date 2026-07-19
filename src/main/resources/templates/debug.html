@@ -100,7 +100,8 @@
     <script th:inline="javascript">
       window.token = /*[[${@jwtTokenSupplier.getJwtToken().orElse("")}]]*/ '';
       window.userId = /*[[${@userService.getCurrentUserId().get()}]]*/ '';
-      window.apiUrl = /*[[${@environment.getProperty('paths.api')}]]*/ '/api';
+      window.ctx = /*[[@{/}]]*/ '/';
+      window.apiUrl = /*[[@{${@environment.getProperty('paths.api')}}]]*/ '/api';
       window.csrfHeader = {
         /*[[${_csrf.headerName}]]*/ ''
         : /*[[${_csrf.token}]]*/ ''
