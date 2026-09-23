@@ -128,7 +128,7 @@ public class SecurityConfig {
                             )).permitAll()
                             .requestMatchers(mvcPattern("/websocket/**")).permitAll()
                             .requestMatchers(mvcPattern(
-                                    "/monitoring", "/monitoring/**", "admin", "/admin/**"
+                                    "/monitoring", "/monitoring/**", "admin", "/admin/**", "/debug"
                             )).hasAuthority("ADMIN")
                             .anyRequest().authenticated()
                     )
