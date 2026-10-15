@@ -1,5 +1,7 @@
 package de.tim_greller.susserver.controller.api;
 
+import de.tim_greller.susserver.dto.GameMode;
+import de.tim_greller.susserver.dto.GameProgressStatus;
 import de.tim_greller.susserver.dto.PlainSource;
 import de.tim_greller.susserver.dto.TestExecutionResultDTO;
 import de.tim_greller.susserver.exception.ClassLoadException;
@@ -9,6 +11,8 @@ import de.tim_greller.susserver.exception.TestExecutionException;
 import de.tim_greller.susserver.service.auth.UserService;
 import de.tim_greller.susserver.service.execution.ExecutionService;
 import de.tim_greller.susserver.service.execution.TestService;
+import de.tim_greller.susserver.service.game.ActiveGameModeService;
+import de.tim_greller.susserver.service.game.GameProgressionService;
 import de.tim_greller.susserver.service.tracking.UserEventTrackingService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -27,6 +31,8 @@ public class TestExecutionController {
     private final UserService userService;
     private final ExecutionService executionService;
     private final UserEventTrackingService trackingService;
+    private final ActiveGameModeService activeModeService;
+    private final GameProgressionService gameProgressionService;
 
 
     @PostMapping(value = "${paths.api}/components/{componentName}/test/execute")
@@ -39,9 +45,15 @@ public class TestExecutionController {
                 testSource.getCode()
         );
 
+        activeModeService.bindMode(GameMode.Testing);
+
         // compile and execute
         try {
-            var result = executionService.execute(componentName, userService.requireCurrentUserId());
+            // In the testing strand's DEBUGGING phase a green run is verified against the hidden tests
+            boolean verifyFix = gameProgressionService.getCurrentGameProgression()
+                    .map(p -> p.getStatus() == GameProgressStatus.DEBUGGING)
+                    .orElse(false);
+            var result = executionService.execute(componentName, userService.requireCurrentUserId(), verifyFix);
             trackingService.trackEvent("test-executed", result);
             return result;
         } catch (CompilationException | ClassLoadException | TestExecutionException e) {
@@ -50,6 +62,8 @@ public class TestExecutionController {
         } catch (NotFoundException e) {
             trackingService.trackEvent("test-not-found", e.getMessage());
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, e.getMessage());
+        } finally {
+            activeModeService.clearMode();
         }
     }
 }

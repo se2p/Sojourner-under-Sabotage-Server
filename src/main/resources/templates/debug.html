@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en-us" xmlns:th="https://www.thymeleaf.org">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+    <title>Sojourner under Sabotage | Debug Editor</title>
+    <link rel="stylesheet" th:href="@{css/base.css}">
+    <link rel="stylesheet" th:href="@{css/game.css}">
+
+    <link rel="apple-touch-icon" sizes="180x180" th:href="@{/images/favicon/apple-touch-icon.png}">
+    <link rel="icon" type="image/png" sizes="32x32" th:href="@{/images/favicon/favicon-32x32.png}">
+    <link rel="icon" type="image/png" sizes="16x16" th:href="@{/images/favicon/favicon-16x16.png}">
+    <link rel="shortcut icon" th:href="@{/images/favicon/favicon.ico}">
+  </head>
+  <body id="debug-page">
+
+    <div class="debug-page-layout">
+
+      <div id="button-bar" class="button-bar">
+
+        <select id="component-select" title="Select component to debug">
+          <option value="">— select component —</option>
+          <option th:each="comp : ${components}" th:value="${comp}" th:text="${comp}"></option>
+        </select>
+
+        <button id="editor-execute-btn" class="button clr-success"
+                title="Run [F10] – execute the runner against the current class"
+                disabled>
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 384 512">
+            <path d="M73 39c-14.8-9.1-33.4-9.4-48.5-.9S0 62.6 0 80L0 432c0 17.4 9.4 33.4 24.5 41.9s33.7 8.1 48.5-.9L361 297c14.3-8.7 23-24.2 23-41s-8.7-32.2-23-41L73 39z"/>
+          </svg>
+          Run
+        </button>
+
+        <button id="editor-debug-btn" class="button"
+                title="Debug – execute and inspect the step-by-step debug trace"
+                disabled>
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+            <path d="M256 0c53 0 96 43 96 96l0 3.6c0 15.7-12.7 28.4-28.4 28.4l-135.1 0c-15.7 0-28.4-12.7-28.4-28.4l0-3.6c0-53 43-96 96-96zM41.4 105.4c12.5-12.5 32.8-12.5 45.3 0l64 64c.7 .7 1.3 1.4 1.9 2.1c14.2-7.3 30.4-11.4 47.5-11.4l112 0c17.1 0 33.2 4.1 47.5 11.4c.6-.7 1.2-1.5 1.9-2.1l64-64c12.5-12.5 32.8-12.5 45.3 0s12.5 32.8 0 45.3l-64 64c-.7 .7-1.4 1.3-2.1 1.9c6.2 12.1 10.1 25.5 11.1 39.5l64.7 0c17.7 0 32 14.3 32 32s-14.3 32-32 32l-64 0c0 24.6-5.5 47.8-15.4 68.6c2.2 1.3 4.2 2.9 6 4.8l64 64c12.5 12.5 12.5 32.8 0 45.3s-32.8 12.5-45.3 0l-63.1-63.1c-24.5 21.8-55.8 36.2-90.3 39.6L288 288c0-17.7-14.3-32-32-32s-32 14.3-32 32l0 222.3c-34.5-3.4-65.8-17.8-90.3-39.6L70.6 534.6c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3l64-64c1.9-1.9 3.9-3.4 6-4.8C85.5 399.8 80 376.6 80 352l-64 0c-17.7 0-32-14.3-32-32s14.3-32 32-32l64.7 0c1.1-14 5-27.4 11.1-39.5c-.7-.6-1.4-1.2-2.1-1.9l-64-64c-12.5-12.5-12.5-32.8 0-45.3z"/>
+          </svg>
+          Debug
+        </button>
+
+        <button id="editor-reset-cut-btn" class="button"
+                title="Reset the class to the last saved server state"
+                style="display:none">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+            <path d="M48.5 224L40 224c-13.3 0-24-10.7-24-24L16 72c0-9.7 5.8-18.5 14.8-22.2s19.3-1.7 26.2 5.2L98.6 96.6c87.6-86.5 228.7-86.2 315.8 1c87.5 87.5 87.5 229.3 0 316.8s-229.3 87.5-316.8 0c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0c62.5 62.5 163.8 62.5 226.3 0s62.5-163.8 0-226.3c-62.2-62.2-162.7-62.5-225.3-1L185 183c6.9 6.9 8.9 17.2 5.2 26.2s-12.5 14.8-22.2 14.8L48.5 224z"/>
+          </svg>
+          Reset class
+        </button>
+
+        <span id="editor-status-text"></span>
+
+        <a th:href="@{/}" class="button" id="back-home-btn"
+           title="Back to home" style="margin-left:auto">
+          ← Home
+        </a>
+      </div>
+
+      <div class="debug-editors">
+        <div class="debug-editor-panel">
+          <span class="debug-editor-label">Class under debug</span>
+          <div class="monaco-editor-container" id="monaco-container-debug"></div>
+        </div>
+        <div class="debug-editor-panel debug-editor-panel--runner">
+          <span class="debug-editor-label">Runner</span>
+          <div class="monaco-editor-container" id="monaco-container-runner"></div>
+        </div>
+      </div>
+
+      <div id="bottom-panel" aria-hidden="true">
+        <div class="bottom-tab-bar">
+          <button class="bottom-tab-btn" id="tab-btn-results" onclick="switchTab('results')">Test Results</button>
+          <button class="bottom-tab-btn" id="tab-btn-debugger" onclick="switchTab('debugger')">Debugger</button>
+        </div>
+        <div id="tab-pane-debugger" class="bottom-tab-pane">
+          <div class="debug-stepper-controls">
+            <button class="button debug-btn" id="debug-prev-btn"
+                    title="Previous step [←]" onclick="debugStepPrev()" disabled>&#9664; Prev</button>
+            <span id="debug-step-label" class="debug-step-label"></span>
+            <button class="button debug-btn" id="debug-next-btn"
+                    title="Next step [→]" onclick="debugStepNext()" disabled>Next &#9654;</button>
+            <button class="button debug-btn debug-continue-btn" id="debug-continue-btn"
+                    title="Continue to next breakpoint [F8]" onclick="debugContinue()" disabled>&#9654;&#9654; Continue</button>
+          </div>
+          <div class="debug-stepper-body">
+            <div class="debug-vars-panel">
+              <div class="debug-vars-list" id="debug-vars-body"></div>
+            </div>
+          </div>
+        </div>
+        <div id="tab-pane-results" class="bottom-tab-pane" aria-hidden="true">
+          <div id="execution-result"></div>
+        </div>
+      </div>
+
+    </div>
+
+    <script th:inline="javascript">
+      window.token = /*[[${@jwtTokenSupplier.getJwtToken().orElse("")}]]*/ '';
+      window.userId = /*[[${@userService.getCurrentUserId().get()}]]*/ '';
+      window.ctx = /*[[@{/}]]*/ '/';
+      window.apiUrl = /*[[@{${@environment.getProperty('paths.api')}}]]*/ '/api';
+      window.csrfHeader = {
+        /*[[${_csrf.headerName}]]*/ ''
+        : /*[[${_csrf.token}]]*/ ''
+      };
+    </script>
+    <script th:src="@{/webpack/main.bundle.js}"></script>
+    <script th:src="@{/js/debug.js}"></script>
+  </body>
+</html>

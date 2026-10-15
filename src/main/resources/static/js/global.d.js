@@ -34,6 +34,7 @@
  * @property {Object<string, Array<LogEntry>>} logs
  * @property {string} message
  * @property {boolean} hiddenTestsPassed
+ * @property {string} [hiddenTestsError]
  */
 
 /**

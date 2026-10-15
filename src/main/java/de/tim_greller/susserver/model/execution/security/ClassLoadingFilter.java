@@ -5,7 +5,16 @@ import java.util.List;
 public class ClassLoadingFilter {
 
     private static final List<String> WHITELISTED_CLASSES = List.of(
-            "java.lang.invoke.StringConcatFactory" // needed to concat variables with strings for logging
+            "java.lang.invoke.StringConcatFactory", // needed to concat variables with strings for logging
+
+            // After sun.reflect.inflationThreshold (default 15) reflective calls, the JVM stops using the
+            // native accessor and generates a bytecode one that extends these JDK-internal supertypes.
+            // JUnit instantiates the test class once per test method, so any suite with more than 15 tests
+            // trips this. Only the abstract supertypes are listed - test code cannot name them itself,
+            // since javac rejects references to non-exported jdk.internal packages.
+            "jdk.internal.reflect.MagicAccessorImpl",
+            "jdk.internal.reflect.ConstructorAccessorImpl",
+            "jdk.internal.reflect.MethodAccessorImpl"
     );
 
     private static final List<String> WHITELISTED_PACKAGES = List.of(

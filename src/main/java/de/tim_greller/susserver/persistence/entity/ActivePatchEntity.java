@@ -19,7 +19,7 @@ import lombok.NoArgsConstructor;
 public class ActivePatchEntity {
 
     @EmbeddedId
-    private UserComponentKey componentKey;
+    private UserComponentKey userComponentKey;
 
     @ManyToOne
     @JoinColumns({@JoinColumn, @JoinColumn})

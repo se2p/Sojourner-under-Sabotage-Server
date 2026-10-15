@@ -4,7 +4,6 @@ import de.tim_greller.susserver.dto.UserRegistrationDTO;
 import de.tim_greller.susserver.exception.UserAlreadyExistException;
 import de.tim_greller.susserver.persistence.entity.UserEntity;
 import de.tim_greller.susserver.service.auth.UserService;
-import de.tim_greller.susserver.service.game.GameProgressionService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Controller;
@@ -21,8 +20,7 @@ import org.springframework.web.servlet.ModelAndView;
 @RequiredArgsConstructor
 public class RegistrationController {
 
-    private final  UserService userService;
-    private final GameProgressionService gameProgressionService;
+    private final UserService userService;
 
 
     @GetMapping("/register")
@@ -41,7 +39,6 @@ public class RegistrationController {
 
         try {
             UserEntity registered = userService.registerNewUserAccount(userDto);
-            gameProgressionService.initGameProgression(registered);
             return new ModelAndView("login", "userRegistered", registered);
         } catch (UserAlreadyExistException uaeEx) {
             result.addError(new FieldError("user", "username",

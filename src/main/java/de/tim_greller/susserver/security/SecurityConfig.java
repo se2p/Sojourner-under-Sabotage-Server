@@ -25,6 +25,7 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.security.web.servlet.util.matcher.MvcRequestMatcher;
+import org.springframework.security.web.util.matcher.AntPathRequestMatcher;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
@@ -118,19 +119,22 @@ public class SecurityConfig {
         public SecurityFilterChain securityFilterChainWeb(HttpSecurity http) throws Exception {
             return http
                     .authorizeHttpRequests((requests) -> requests
+                            .requestMatchers(new AntPathRequestMatcher("/websocket/**")).permitAll()
                             .requestMatchers(mvcPattern(
                                     "/", "/home", "/register", "/error", "/login",
                                     "/css/**", "/js/**", "/images/**", "/fonts/**",
-                                    "/favicon.ico", "/robots.txt"
+                                    "/webpack/**", "/unity/**",
+                                    "/favicon.ico", "/robots.txt", "/websocket/**"
                             )).permitAll()
+                            .requestMatchers(mvcPattern("/websocket/**")).permitAll()
                             .requestMatchers(mvcPattern(
-                                    "/monitoring", "/monitoring/**", "admin", "/admin/**"
+                                    "/monitoring", "/monitoring/**", "admin", "/admin/**", "/debug"
                             )).hasAuthority("ADMIN")
                             .anyRequest().authenticated()
                     )
                     .formLogin((form) -> form
                             .loginPage("/login")
-                            .defaultSuccessUrl("/game")
+                            .defaultSuccessUrl("/")
                             .permitAll()
                     )
                     .logout(logoutConfig -> logoutConfig
