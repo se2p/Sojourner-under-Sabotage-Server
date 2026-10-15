@@ -11,7 +11,8 @@ The source code or a prebuilt export can be found in the [Sojourner-under-Sabota
 
 ## Install and Run the Server
 - Install dependencies `mvn install`
-- Rename `example.application.properties` to `application.properties` and add your database credentials
+- Copy `example.application.properties` to `application.properties` and add your database credentials 
+  (port and db_name in the URL, username and password below).
 - Run the application `mvn spring-boot:run`
 
 Now the server runs and the frontend can be accessed at the port configured in the `application.properties`.
