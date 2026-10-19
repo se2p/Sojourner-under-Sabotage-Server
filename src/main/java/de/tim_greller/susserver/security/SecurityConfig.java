@@ -64,10 +64,13 @@ public class SecurityConfig {
                     // .csrf(csrf -> csrf.csrfTokenRepository(CookieCsrfTokenRepository.withHttpOnlyFalse()))
                     .csrf(AbstractHttpConfigurer::disable)
                     .authorizeHttpRequests(requests -> requests
+                            // PUBLIC
                             .requestMatchers(
                                     mvc.pattern(apiUrl + "/hello"),
                                     mvc.pattern(apiUrl + "/auth")).permitAll()
+                            // ADMIN
                             .requestMatchers(mvc.pattern(apiUrl + "/admin/**")).hasAuthority("ADMIN")
+                            // USER
                             .requestMatchers(mvc.pattern(apiUrl + "/**")).authenticated()
                     )
                     // disable redirect to log in form and send 401 instead
@@ -110,6 +113,7 @@ public class SecurityConfig {
     public static class WebSecurityConfig {
 
         private final MvcRequestMatcher.Builder mvc;
+        private final LoginRedirectSuccessHandler loginRedirectSuccessHandler;
 
         private MvcRequestMatcher[] mvcPattern(String... strings) {
             return Stream.of(strings).map(mvc::pattern).toArray(MvcRequestMatcher[]::new);
@@ -119,22 +123,24 @@ public class SecurityConfig {
         public SecurityFilterChain securityFilterChainWeb(HttpSecurity http) throws Exception {
             return http
                     .authorizeHttpRequests((requests) -> requests
-                            .requestMatchers(new AntPathRequestMatcher("/websocket/**")).permitAll()
+                            // PUBLIC
                             .requestMatchers(mvcPattern(
                                     "/", "/home", "/register", "/error", "/login",
                                     "/css/**", "/js/**", "/images/**", "/fonts/**",
-                                    "/webpack/**", "/unity/**",
-                                    "/favicon.ico", "/robots.txt", "/websocket/**"
+                                    "/favicon.ico", "/robots.txt", "/websocket/**",
+                                    "/part-1-debugging", "/part-2-testing-and-debugging"
                             )).permitAll()
-                            .requestMatchers(mvcPattern("/websocket/**")).permitAll()
+                            // ADMIN
                             .requestMatchers(mvcPattern(
                                     "/monitoring", "/monitoring/**", "admin", "/admin/**", "/debug"
                             )).hasAuthority("ADMIN")
+                            // USER
                             .anyRequest().authenticated()
                     )
                     .formLogin((form) -> form
                             .loginPage("/login")
-                            .defaultSuccessUrl("/")
+                            .successHandler(loginRedirectSuccessHandler)
+                            // .defaultSuccessUrl("/", false)
                             .permitAll()
                     )
                     .logout(logoutConfig -> logoutConfig
