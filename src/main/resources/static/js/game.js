@@ -69,14 +69,7 @@ const uiOverlay = document.getElementById('ui-overlay');
 
 const result = document.getElementById('execution-result');
 
-function renderResult(content) {
-    result.innerHTML = content;
-    if (content) {
-        document.getElementById('bottom-panel').setAttribute('aria-hidden', 'false');
-        switchTab('results');
-        if (_lastCoverage) _applyCoverageDecorations();
-        setTimeout(() => result.scrollIntoView({behavior: 'smooth', block: 'nearest'}), 50);
-    }
+function doEditorLayout() {
     const editorContainers = document.querySelectorAll('.monaco-editor-container');
     editorContainers.forEach(el => el.style.height = '0');
     editors.monaco.test.layout();
@@ -86,6 +79,18 @@ function renderResult(content) {
         editors.monaco.test.layout();
         editors.monaco.debug.layout();
     });
+}
+
+function renderResult(content) {
+    result.innerHTML = content;
+    if (content) {
+        document.getElementById('bottom-panel').setAttribute('aria-hidden', 'false');
+        switchTab('results');
+        if (_lastCoverage) _applyCoverageDecorations();
+        setTimeout(() => result.scrollIntoView({behavior: 'smooth', block: 'nearest'}), 50);
+    }
+
+    doEditorLayout();
 }
 
 function sessionExpired(statusInfo) {
@@ -697,6 +702,7 @@ function switchTab(name) {
     });
     _debugRevealCoverage = name === 'debugger';
     _applyCoverageDecorations();
+    doEditorLayout();
 }
 
 

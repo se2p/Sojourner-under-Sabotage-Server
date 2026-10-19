@@ -55,7 +55,7 @@
     display: flex;
     flex-direction: column;
     min-height: 100%;
-    padding: 3rem;
+    padding: 3rem 3rem 1rem;
     box-sizing: border-box;
 }
 
@@ -96,8 +96,8 @@
     background: #1e1e1e; /* --vscode-editor-background */
     border: 2px solid transparent;
     border-radius: 0.5rem;
-    padding: 1.5rem;
-    margin-block: 1.5rem;
+    padding: .25rem;
+    margin-block: 2rem 1rem;
     color: #d4d4d4;
 }
 #bottom-panel[aria-hidden="true"] {
@@ -186,6 +186,7 @@
 }
 .debug-stepper-body {
     overflow-x: auto;
+    min-height: 4rem;
 }
 .debug-vars-list {
     font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
@@ -296,7 +297,7 @@
 }
 #execution-result {
     color: #d4d4d4;
-    max-height: 30vh;
+    max-height: 20vh;
     overflow: auto;
 }
 #execution-result:empty {
