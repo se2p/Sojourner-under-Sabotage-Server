@@ -23,7 +23,7 @@ main.screen {
     z-index: 2;
 }
 
-.teaser, .research {
+.teaser, .research, .intro {
     max-width: 50rem;
     min-height: 100vh;
     margin: 0 auto;
@@ -32,10 +32,6 @@ main.screen {
     justify-content: center;
     align-items: center;
     padding-block: 4rem;
-}
-/* Tighter than the shared 4rem so the strand cards fit the viewport even with both buttons. */
-.teaser {
-    padding-block: 1.5rem;
 }
 
 h1 {
@@ -69,7 +65,7 @@ h1 {
 
 .teaser img {
     transform: translateX(3%);
-    margin-top: -5rem;
+    margin-top: -3rem;
     pointer-events: none;
     user-select: none;
 }
@@ -100,61 +96,28 @@ h1 {
     transform: translateY(-2px);
 }
 
-.strand-cards {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 1.5rem;
-    margin-top: 1rem;
-    justify-content: center;
-}
-.strand-card {
-    border: 1px solid rgba(255,255,255,.2);
-    border-radius: 1rem;
-    padding: 1.5rem 2.5rem;
+.intro {
     display: flex;
     flex-direction: column;
-    align-items: center;
-    gap: 0.6rem;
-    background: rgba(255,255,255,.03);
-    flex: 1 1 20rem;
-    max-width: 27rem;
-    text-align: center;
-    transition: border-color .3s, box-shadow .3s;
 }
-.strand-card:hover {
-    border-color: rgba(255,255,255,.5);
+.intro .card:hover {
     box-shadow: 0 0 40px 0 rgba(255,255,255,.08);
 }
-.strand-name {
+.intro .card .part {
     margin: 0;
-    font-size: 1.4rem;
-    letter-spacing: .1rem;
 }
-.strand-card .button {
+.intro .card .button {
     margin-top: .5rem;
     font-size: 1rem;
     padding: .6rem 1.8rem;
     letter-spacing: .05rem;
 }
-.strand-card .btn-small {
-    font-size: .9rem;
-    color: #ccc;
-    text-underline-offset: 2px;
-    transition: color .3s, text-underline-offset .3s;
+.intro .card .text {
+    margin-block: 1rem;
 }
-.strand-card .btn-small:hover,
-.strand-card .btn-small:focus {
-    text-underline-offset: 4px;
-    color: #fff;
-}
-.strand-intro {
-    margin-top: 1rem;
-    font-size: .9rem;
-    text-align: center;
-}
-.strand-intro h3 {
+.intro .card .text h2 {
     margin: 0;
-    letter-spacing: 2px;
+    letter-spacing: 1px;
 }
 
 .box {
@@ -272,13 +235,15 @@ small,
     letter-spacing: 1px;
     line-height: 1.25;
 }
-.research article {
+.research article,
+.intro .card {
     padding: 1rem;
     border: 1px dashed #fff;
     margin-block: 1rem;
     border-radius: 12px;
 }
-.research article p:last-child {
+.research article p:last-child,
+.intro .card p:last-child {
     margin-bottom: 5px;
 }
 
