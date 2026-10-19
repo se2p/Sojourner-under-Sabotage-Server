@@ -17,10 +17,10 @@ html, body {
     margin: 0;
 }
 
-a.button {
+.button {
     text-decoration: none;
 }
-.button-bar .button, a.button {
+.button-bar .button, .button {
     padding: 0.5rem 1rem;
     border-radius: 0.5rem;
     --clr-bg: #135275;
@@ -32,10 +32,19 @@ a.button {
     cursor: pointer;
     transition: background .3s, color .3s;
 }
-.button-bar .button:hover, .button-bar .button:focus, a.button:hover, a.button:focus {
+.button.small {
+    padding: 0.2rem 0.6rem;
+    border-radius: 0.3rem;
+    font-size: 0.75rem;
+}
+.button-bar .button:hover,
+.button-bar .button:focus-visible,
+.button:hover,
+.button:focus-visible {
     --clr-bg: #14a0cd;
 }
-.button-bar .button:disabled, a.button:disabled {
+.button-bar .button:disabled,
+.button:disabled {
     --clr-bg: #66696f66;
     cursor: not-allowed;
 }

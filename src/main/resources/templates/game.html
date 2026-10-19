@@ -94,16 +94,16 @@
             <button class="bottom-tab-btn" id="tab-btn-results" onclick="trackClientEvent('debug-tab-switch',{tab:'results'}); switchTab('results')">Test Results</button>
             <button class="bottom-tab-btn" id="tab-btn-debugger" onclick="trackClientEvent('debug-tab-switch',{tab:'debugger'}); switchTab('debugger')">Debugger</button>
             <div class="bottom-tab-bar-end">
-              <button id="toggle-coverage-btn" class="bottom-toggle-btn is-on" onclick="toggleCoverageHighlight()" title="Toggle coverage highlighting">Coverage</button>
-              <button id="toggle-debug-btn" class="bottom-toggle-btn is-on" onclick="toggleDebugHighlight()" title="Toggle debug line highlighting">Debug line</button>
+              <button id="toggle-coverage-btn" class="button small bottom-toggle-btn is-on" onclick="toggleCoverageHighlight()" title="Toggle coverage highlighting">Coverage</button>
+              <button id="toggle-debug-btn" class="button small bottom-toggle-btn is-on" onclick="toggleDebugHighlight()" title="Toggle debug line highlighting">Debug line</button>
             </div>
           </div>
           <div id="tab-pane-debugger" class="bottom-tab-pane">
             <div class="debug-stepper-controls">
-              <button class="button debug-btn" id="debug-prev-btn" title="Previous step [←]" onclick="debugStepPrev()" disabled>&#9664; Prev</button>
+              <button class="button small debug-btn" id="debug-prev-btn" title="Previous step [←]" onclick="debugStepPrev()" disabled>&#9664; Prev</button>
               <span id="debug-step-label" class="debug-step-label"></span>
-              <button class="button debug-btn" id="debug-next-btn" title="Next step [→]" onclick="debugStepNext()" disabled>Next &#9654;</button>
-              <button class="button debug-btn debug-continue-btn" id="debug-continue-btn" title="Continue to next breakpoint [F8]" onclick="debugContinue()" disabled>&#9654;&#9654; Continue</button>
+              <button class="button small debug-btn" id="debug-next-btn" title="Next step [→]" onclick="debugStepNext()" disabled>Next &#9654;</button>
+              <button class="button small debug-btn debug-continue-btn" id="debug-continue-btn" title="Continue to next breakpoint [F8]" onclick="debugContinue()" disabled>&#9654;&#9654; Continue</button>
             </div>
             <div class="debug-stepper-body">
               <div class="debug-vars-panel">
