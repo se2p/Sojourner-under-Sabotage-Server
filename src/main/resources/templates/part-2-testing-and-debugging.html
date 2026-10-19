@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" xmlns:th="https://www.thymeleaf.org"
+      xmlns:sec="http://www.thymeleaf.org/extras/spring-security" lang="en">
+<head>
+    <title>Sojourner under Sabotage Part II ─ Learning Software Testing and Debugging in Java and JUnit</title>
+    <meta name="description" content="Sojourner under Sabotage is a serious game that lets you practice software testing and debugging.">
+
+    <link rel="stylesheet" type="text/css" th:href="@{/css/base.css}" />
+    <link rel="stylesheet" type="text/css" th:href="@{/css/pages.css}" />
+
+    <link rel="apple-touch-icon" sizes="180x180" th:href="@{/images/favicon/apple-touch-icon.png}">
+    <link rel="icon" type="image/png" sizes="32x32" th:href="@{/images/favicon/favicon-32x32.png}">
+    <link rel="icon" type="image/png" sizes="16x16" th:href="@{/images/favicon/favicon-16x16.png}">
+    <link rel="manifest" th:href="@{/images/favicon/site.webmanifest}">
+    <link rel="mask-icon" th:href="@{/images/favicon/safari-pinned-tab.svg}" color="#5bbad5">
+    <link rel="shortcut icon" th:href="@{/images/favicon/favicon.ico}">
+    <meta name="msapplication-TileColor" content="#da532c">
+    <meta name="msapplication-config" th:content="@{/images/favicon/browserconfig.xml}">
+    <meta name="theme-color" content="#000000">
+</head>
+<body>
+<nav class="home-corner">
+    <a th:href="@{/}">&lt; Home</a>
+</nav>
+<nav class="auth-corner">
+    <a sec:authorize="isAuthenticated()" th:href="@{/logout}" class="button">Log out</a>
+    <a sec:authorize="isAnonymous()" th:href="@{/login(redirect='/part-2-testing-and-debugging')}" class="button">Log in</a>
+</nav>
+<main>
+    <div class="teaser">
+        <div th:if="${param.logout}" class="logout">
+            You have been logged out.
+        </div>
+        <h1>Sojourner under Sabotage<br><span class="orange">Testing &amp; Debugging</span></h1>
+        <p>Learn software testing with JUnit and debugging in Java.</p>
+        <img th:src="@{/images/sus-teaser.png}" alt="Sojourner under Sabotage" draggable="false" />
+        <div class="button-bar flex">
+            <a sec:authorize="isAnonymous()" th:href="@{/login(redirect='/part-2-testing-and-debugging')}" class="button">Log in to play</a>
+            <a th:if="${hasTestingSave}" th:href="@{/game}" class="button">Continue</a>
+            <a sec:authorize="isAuthenticated()" th:href="@{/reset}" class="ghost button">New game</a>
+        </div>
+    </div>
+    <div class="intro centered">
+        <div class="text">
+            <h2><span class="orange">You were never meant to be awake.</span></h2>
+            <p>
+                Aboard the Sojourner, humanity’s last hope drifts through the endless void of space,
+                bound for a distant solar system, hoping to find a new home for the human race.
+                The journey was expected to last centuries, your body preserved in cryogenic sleep until arrival.
+            </p>
+            <p>
+                <strong>But something went wrong.</strong><br>
+                Your pod cracked open many years too early, due to a software error in the capsules code.
+                Someone — or something — has been tampering with the ship.
+                More and more subtle faults appear in critical components, threatening the mission’s survival.
+                Are these random malfunctions&hellip; or deliberate sabotage?
+            </p>
+            <p>
+                Gladly, you are not entirely alone.<br>
+                A service robot accompanies you, guiding and assisting as you secure each system.
+                With the power of automated tests, you can detect bugs and repair sabotaged components before they cause any further harm.
+                <!--Yet the questions remains: who is behind these attacks, and how do they breach the very heart of the Sojourner?-->
+            </p>
+            <!--p>
+                Every test you write, every failure you catch, brings you closer to the truth.
+                And to the realization that not all allies can be trusted.
+            </p-->
+        </div>
+    </div>
+    <div class="research">
+        <h2>Research</h2>
+        <article>
+            <h3>Sojourner under Sabotage: A Serious Testing and Debugging Game</h3>
+            <p class="citation">Philipp Straubinger, Tim Greller, and Gordon Fraser. 2025. Sojourner under Sabotage: A Serious Testing and Debugging Game. In Proceedings of the 33rd ACM International Conference on the Foundations of Software Engineering (FSE Companion '25). Association for Computing Machinery, New York, NY, USA, 738–748.</p>
+            <p class="abstract">Teaching software testing and debugging is a critical yet challenging task in computer science education, often hindered by low student engagement and the perceived monotony of these activities. Sojourner under Sabotage, a browser-based serious game, reimagines this learning experience by blending education with an immersive and interactive storyline. Players take on the role of a spaceship crew member, using unit testing and debugging techniques to identify and repair sabotaged components across seven progressively challenging levels. A study with 79 students demonstrates that the game is a powerful tool for enhancing motivation, engagement, and skill development. These findings underscore the transformative potential of serious games in making essential software engineering practices accessible and enjoyable.</p>
+            <p><strong>Read more: <a href="https://doi.org/10.1145/3696630.3727231" target="_blank" rel="noopener" title="Sojourner under Sabotage: A Serious Testing and Debugging Game">https://doi.org/10.1145/3696630.3727231</a></strong></p>
+        </article>
+        <article>
+            <h3>Teaching Software Testing and Debugging with the Serious Game Sojourner under Sabotage</h3>
+            <p class="citation">Philipp Straubinger, Tim Greller, and Gordon Fraser. 2025. Teaching Software Testing and Debugging with the Serious Game Sojourner under Sabotage. In Proceedings of the 34th ACM SIGSOFT International Symposium on Software Testing and Analysis (ISSTA Companion '25). Association for Computing Machinery, New York, NY, USA, 16–20.</p>
+            <p class="abstract">Software testing and debugging are often seen as tedious, making them challenging to teach effectively. We present Sojourner under Sabotage, a browser-based serious game that enhances learning through interactive, narrative-driven challenges. Players act as spaceship crew members, using unit tests and debugging techniques to fix sabotaged components. Sojourner under Sabotage provides hands-on experience with the real-world testing framework JUnit, improving student engagement, test coverage, and debugging skills.</p>
+            <p><strong>Read more: <a href="https://doi.org/10.1145/3713081.3731730" target="_blank" rel="noopener" title="Sojourner under Sabotage: A Serious Testing and Debugging Game">https://doi.org/10.1145/3713081.3731730</a></strong></p>
+        </article>
+    </div>
+</main>
+<footer id="legal-and-credits">
+    <h2 id="legal">Legal</h2>
+    <p>
+        <a rel="noopener" target="_blank" href="https://www.uni-passau.de/en/privacy-statement">Privacy policy (EN)</a><br>
+        <a rel="noopener" target="_blank" href="https://www.uni-passau.de/datenschutzerklaerung">Datenschutzerklärung (DE)</a>
+    </p>
+    <p>
+        <a rel="noopener" target="_blank" href="https://www.uni-passau.de/en/legal-notices/">Legal Notice (EN)</a><br>
+        <a rel="noopener" target="_blank" href="https://www.uni-passau.de/impressum">Impressum (DE)</a>
+    </p>
+    <p>
+        Sojourner under Sabotage is a project of the <a rel="noopener" target="_blank" href="https://www.fim.uni-passau.de/lehrstuhl-fuer-software-engineering-ii/">Chair of Software Engineering II</a> at the University of Passau.
+    </p>
+    <p><a th:href="@{/#credits}">Credits</a></p>
+</footer>
+</body>
+</html>

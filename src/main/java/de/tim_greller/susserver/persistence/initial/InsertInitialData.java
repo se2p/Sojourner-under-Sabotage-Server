@@ -10,7 +10,9 @@ import java.util.stream.Stream;
 
 import static java.nio.charset.StandardCharsets.UTF_8;
 
+import de.tim_greller.susserver.dto.GameMode;
 import de.tim_greller.susserver.persistence.entity.CutEntity;
+import de.tim_greller.susserver.persistence.entity.DebugMainEntity;
 import de.tim_greller.susserver.persistence.entity.FallbackTestEntity;
 import de.tim_greller.susserver.persistence.entity.GameProgressionEntity;
 import de.tim_greller.susserver.persistence.entity.PatchEntity;
@@ -18,6 +20,7 @@ import de.tim_greller.susserver.persistence.keys.ComponentKey;
 import de.tim_greller.susserver.persistence.keys.ComponentStageKey;
 import de.tim_greller.susserver.persistence.repository.ComponentRepository;
 import de.tim_greller.susserver.persistence.repository.CutRepository;
+import de.tim_greller.susserver.persistence.repository.DebugMainRepository;
 import de.tim_greller.susserver.persistence.repository.FallbackTestRepository;
 import de.tim_greller.susserver.persistence.repository.GameProgressionRepository;
 import de.tim_greller.susserver.persistence.repository.PatchRepository;
@@ -44,6 +47,7 @@ public class InsertInitialData implements CommandLineRunner {
     private final CutRepository cutRepository;
     private final PatchRepository patchRepository;
     private final FallbackTestRepository fallbackTestRepository;
+    private final DebugMainRepository debugMainRepository;
     private final GameProgressionRepository gameProgressionRepository;
     private final PatchService patchService;
     private final ResourceLoader resourceLoader;
@@ -63,20 +67,38 @@ public class InsertInitialData implements CommandLineRunner {
     @Value("${gameProgressionCSV:classpath:game/game-progression.csv}")
     private String gameProgressionCSV;
 
+    @Value("${debugCutPattern:classpath:debug-cut/*.java}")
+    private String debugCutPattern;
+
+    @Value("${debugTestPattern:classpath:debug-test/stage-*/*.java}")
+    private String debugTestPattern;
+
+    @Value("${debugMainPattern:classpath:debug-main/stage-*/*.java}")
+    private String debugMainPattern;
+
+    @Value("${debugProgressionCSV:classpath:game/debug-progression.csv}")
+    private String debugProgressionCSV;
+
 
     @Override
     public void run(String... args) throws Exception {
         if (initData) {
-            readAndSaveCuts();
-            readAndSaveFallbackTests();
-            readAndSaveGameProgression();
+            readAndSaveCuts(cutPattern);
+            readAndSaveFallbackTests(fallbackTestPattern);
+            readAndSaveGameProgression(gameProgressionCSV, GameMode.Testing);
+
+            readAndSaveCuts(debugCutPattern);
+            readAndSaveFallbackTests(debugTestPattern);
+            readAndSaveDebugMains();
+            readAndSaveGameProgression(debugProgressionCSV, GameMode.Debugging);
+
             readAndSavePatches();
         }
     }
 
-    private void readAndSaveCuts() throws IOException {
+    private void readAndSaveCuts(String pattern) throws IOException {
         ResourcePatternResolver resolver = ResourcePatternUtils.getResourcePatternResolver(resourceLoader);
-        for (Resource resource : resolver.getResources(cutPattern)) {
+        for (Resource resource : resolver.getResources(pattern)) {
             // component name = name of file
             var name = getComponentName(resource);
             var content = resource.getContentAsString(UTF_8);
@@ -90,9 +112,9 @@ public class InsertInitialData implements CommandLineRunner {
         }
     }
 
-    private void readAndSaveFallbackTests() throws IOException {
+    private void readAndSaveFallbackTests(String pattern) throws IOException {
         ResourcePatternResolver resolver = ResourcePatternUtils.getResourcePatternResolver(resourceLoader);
-        for (Resource resource : resolver.getResources(fallbackTestPattern)) {
+        for (Resource resource : resolver.getResources(pattern)) {
             var stage = getStageNumber(resource);
             // component name = name of file without -Test.java
             var name = Objects.requireNonNull(resource.getFilename()).split("Test\\.java")[0];
@@ -108,7 +130,7 @@ public class InsertInitialData implements CommandLineRunner {
 
     /**
      * Reads all patches from the classpath and saves them to the database.
-     * Requires {@link InsertInitialData#readAndSaveCuts()} to be called first, so all CUTs are available.
+     * Requires {@link InsertInitialData#readAndSaveCuts(String)} to be called first, so all CUTs are available.
      */
     private void readAndSavePatches() throws IOException {
         ResourcePatternResolver resolver = ResourcePatternUtils.getResourcePatternResolver(resourceLoader);
@@ -117,8 +139,20 @@ public class InsertInitialData implements CommandLineRunner {
             var component = componentRepository.getOrCreate(getComponentName(resource));
             var cut = cutRepository.findById(new ComponentKey(component)).orElseThrow();
             var patch = patchService.createPatch(cut.getSourceCode(), mutatedSourceCode);
-            var mutant = new PatchEntity(patch, new ComponentStageKey(component,  getStageNumber(resource)));
+            var mutant = new PatchEntity(patch, new ComponentStageKey(component, getStageNumber(resource)));
             patchRepository.save(mutant);
+        }
+    }
+
+    // Load the debug strand's main/entry-point sources from debug-main/
+    private void readAndSaveDebugMains() throws IOException {
+        ResourcePatternResolver resolver = ResourcePatternUtils.getResourcePatternResolver(resourceLoader);
+        for (Resource resource : resolver.getResources(debugMainPattern)) {
+            var stage = getStageNumber(resource);
+            var name = getComponentName(resource);
+            var content = resource.getContentAsString(UTF_8);
+            var componentKey = new ComponentStageKey(componentRepository.getOrCreate(name), stage);
+            debugMainRepository.save(new DebugMainEntity(componentKey, content));
         }
     }
 
@@ -143,20 +177,21 @@ public class InsertInitialData implements CommandLineRunner {
                 .findAny().orElseThrow();
     }
 
-    private void readAndSaveGameProgression() throws IOException {
+    private void readAndSaveGameProgression(String csvPath, GameMode mode) throws IOException {
         ResourcePatternResolver resolver = ResourcePatternUtils.getResourcePatternResolver(resourceLoader);
-        Resource resource = resolver.getResource(gameProgressionCSV);
+        Resource resource = resolver.getResource(csvPath);
 
         try (Stream<String> lines = new BufferedReader(new InputStreamReader(resource.getInputStream(), UTF_8)).lines()) {
             lines.skip(1) // Skip the header line
                     .map(line -> line.split(";"))
-                    .map(this::createGameProgressionEntity)
+                    .map(values -> createGameProgressionEntity(values, mode))
                     .forEach(gameProgressionRepository::save);
         }
     }
 
-    private GameProgressionEntity createGameProgressionEntity(String[] values) {
+    private GameProgressionEntity createGameProgressionEntity(String[] values, GameMode mode) {
         return GameProgressionEntity.builder()
+                .mode(mode)
                 .orderIndex(Integer.parseInt(values[0]))
                 .roomId(Integer.parseInt(values[1]))
                 .component(componentRepository.getOrCreate(values[2]))

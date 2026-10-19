@@ -10,7 +10,8 @@ public enum GameProgressStatus {
     TESTS_ACTIVE,
     DESTROYED,
     MUTATED,
-    DEBUGGING;
+    DEBUGGING,
+    PUZZLE;
 
     /**
      * Checks if the status is an initial status.

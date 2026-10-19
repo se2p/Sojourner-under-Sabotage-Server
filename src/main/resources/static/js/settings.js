@@ -1,6 +1,7 @@
 class Settings {
     static #keys = {
-        codeEditorIntroductionShown: 'codeEditorIntroductionShown'
+        codeEditorIntroductionShown: 'codeEditorIntroductionShown',
+        debugRoomIntrosShown: 'debugRoomIntrosShown'
     }
     static #instance = null;
     #settings = null;

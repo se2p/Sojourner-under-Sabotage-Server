@@ -13,6 +13,17 @@ import org.springframework.asm.Type;
 
 public class CutInstrumentationAdapter extends ClassVisitor {
 
+    // Fields share the tracker's variable state with the locals, which are keyed "method/name".
+    // Qualifying the field keeps a field and a same-named local apart, and reads like an IDE.
+    private static String qualifiedFieldName(final int opcode, final String owner, final String name) {
+        if (opcode == Opcodes.PUTFIELD) {
+            return "this." + name;
+        }
+        final String simpleName = owner.substring(owner.lastIndexOf('/') + 1);
+        final int userSuffix = simpleName.indexOf('#');
+        return (userSuffix < 0 ? simpleName : simpleName.substring(0, userSuffix)) + "." + name;
+    }
+
     private final String classId;
 
     public CutInstrumentationAdapter(final ClassWriter pClassWriter, final String pClassId) {
@@ -28,54 +39,12 @@ public class CutInstrumentationAdapter extends ClassVisitor {
             final String pSignature,
             final String[] pExceptions) {
         final MethodVisitor mv = super.visitMethod(pAccess, pMethodName, pDescriptor, pSignature, pExceptions);
-
-        return new MethodVisitor(ASM7, mv) {
+        //moved to super class due to duplicate code
+        return new VarTrackingMethodVisitor(ASM7, mv, classId, pMethodName, pAccess, pDescriptor) {
             @Override
             public void visitLineNumber(final int pLine, final Label pStart) {
-                super.visitLineNumber(pLine, pStart);
                 InstrumentationTracker.trackLine(pLine, classId);
-                visitLdcInsn(pLine);
-                visitLdcInsn(classId);
-                visitMethodInsn(
-                        Opcodes.INVOKESTATIC,
-                        Type.getInternalName(InstrumentationTracker.class),
-                        "trackLineVisit",
-                        "(ILjava/lang/String;)V",
-                        false);
-            }
-
-            @Override
-            public void visitVarInsn(int opcode, int varIndex) {
-                super.visitVarInsn(opcode, varIndex);
-
-                if (opcode >= 54 && opcode <= 58) { // visitVarInsn STORE Opcodes
-                    String descriptor = switch (opcode) {
-                        case Opcodes.ISTORE -> "I";
-                        case Opcodes.FSTORE -> "F";
-                        case Opcodes.DSTORE -> "D";
-                        case Opcodes.LSTORE -> "J";
-                        default -> "Ljava/lang/Object;";
-                    };
-                    int loadOpcode = opcode - 33;
-                    visitVarInsn(loadOpcode, varIndex);
-                    visitLdcInsn(varIndex);
-                    visitLdcInsn(classId);
-                    visitLdcInsn(pMethodName);
-                    visitMethodInsn(
-                            Opcodes.INVOKESTATIC,
-                            Type.getInternalName(InstrumentationTracker.class),
-                            "trackVar",
-                            "("+descriptor+"ILjava/lang/String;Ljava/lang/String;)V",
-                            false);
-                }
-            }
-
-            @Override
-            public void visitLocalVariable(String name, String descriptor, String signature, Label start, Label end,
-                                           int index) {
-                super.visitLocalVariable(name, descriptor, signature, start, end, index);
-                // todo: visit method does not work here?
-                InstrumentationTracker.trackVarDef(index, name, descriptor, classId, pMethodName);
+                super.visitLineNumber(pLine, pStart);
             }
 
             @Override
@@ -94,7 +63,7 @@ public class CutInstrumentationAdapter extends ClassVisitor {
                             Opcodes.INVOKESTATIC,
                             Type.getInternalName(Debug.class),
                             "log",
-                            "("+type+"Ljava/lang/String;Ljava/lang/String;)V",
+                            "(" + type + "Ljava/lang/String;Ljava/lang/String;)V",
                             false);
                 } else {
                     super.visitMethodInsn(opcode, owner, name, descriptor, isInterface);
@@ -109,8 +78,37 @@ public class CutInstrumentationAdapter extends ClassVisitor {
                         && desc.equals("Ljava/io/PrintStream;")) {
                     return;
                 }
-
-                super.visitFieldInsn(opcode, owner, name, desc);
+                //necessary to track fields in classes
+                //todo move to super class?
+                if (opcode == Opcodes.PUTFIELD || opcode == Opcodes.PUTSTATIC) {
+                    boolean twoSlot = desc.equals("J") || desc.equals("D");
+                    if (twoSlot) {
+                        visitInsn(opcode == Opcodes.PUTFIELD ? Opcodes.DUP2_X1 : Opcodes.DUP2);
+                    } else {
+                        visitInsn(opcode == Opcodes.PUTFIELD ? Opcodes.DUP_X1 : Opcodes.DUP);
+                    }
+                    super.visitFieldInsn(opcode, owner, name, desc);
+                    visitLdcInsn(qualifiedFieldName(opcode, owner, name));
+                    visitLdcInsn(classId);
+                    visitLdcInsn(pMethodName);
+                    boolean isBool = desc.equals("Z");
+                    String trackMethodName = isBool ? "trackFieldBool" : "trackField";
+                    String typeSig = switch (desc) {
+                        case "J" -> "J";
+                        case "D" -> "D";
+                        case "F" -> "F";
+                        case "I", "Z", "B", "S", "C" -> "I";
+                        default -> "Ljava/lang/Object;";
+                    };
+                    visitMethodInsn(
+                            Opcodes.INVOKESTATIC,
+                            Type.getInternalName(InstrumentationTracker.class),
+                            trackMethodName,
+                            "(" + typeSig + "Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V",
+                            false);
+                } else {
+                    super.visitFieldInsn(opcode, owner, name, desc);
+                }
             }
         };
     }

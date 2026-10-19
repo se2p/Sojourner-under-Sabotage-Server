@@ -25,6 +25,7 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.security.web.servlet.util.matcher.MvcRequestMatcher;
+import org.springframework.security.web.util.matcher.AntPathRequestMatcher;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
@@ -63,10 +64,13 @@ public class SecurityConfig {
                     // .csrf(csrf -> csrf.csrfTokenRepository(CookieCsrfTokenRepository.withHttpOnlyFalse()))
                     .csrf(AbstractHttpConfigurer::disable)
                     .authorizeHttpRequests(requests -> requests
+                            // PUBLIC
                             .requestMatchers(
                                     mvc.pattern(apiUrl + "/hello"),
                                     mvc.pattern(apiUrl + "/auth")).permitAll()
+                            // ADMIN
                             .requestMatchers(mvc.pattern(apiUrl + "/admin/**")).hasAuthority("ADMIN")
+                            // USER
                             .requestMatchers(mvc.pattern(apiUrl + "/**")).authenticated()
                     )
                     // disable redirect to log in form and send 401 instead
@@ -109,6 +113,7 @@ public class SecurityConfig {
     public static class WebSecurityConfig {
 
         private final MvcRequestMatcher.Builder mvc;
+        private final LoginRedirectSuccessHandler loginRedirectSuccessHandler;
 
         private MvcRequestMatcher[] mvcPattern(String... strings) {
             return Stream.of(strings).map(mvc::pattern).toArray(MvcRequestMatcher[]::new);
@@ -118,19 +123,24 @@ public class SecurityConfig {
         public SecurityFilterChain securityFilterChainWeb(HttpSecurity http) throws Exception {
             return http
                     .authorizeHttpRequests((requests) -> requests
+                            // PUBLIC
                             .requestMatchers(mvcPattern(
                                     "/", "/home", "/register", "/error", "/login",
                                     "/css/**", "/js/**", "/images/**", "/fonts/**",
-                                    "/favicon.ico", "/robots.txt"
+                                    "/favicon.ico", "/robots.txt", "/websocket/**",
+                                    "/part-1-debugging", "/part-2-testing-and-debugging"
                             )).permitAll()
+                            // ADMIN
                             .requestMatchers(mvcPattern(
-                                    "/monitoring", "/monitoring/**", "admin", "/admin/**"
+                                    "/monitoring", "/monitoring/**", "admin", "/admin/**", "/debug"
                             )).hasAuthority("ADMIN")
+                            // USER
                             .anyRequest().authenticated()
                     )
                     .formLogin((form) -> form
                             .loginPage("/login")
-                            .defaultSuccessUrl("/game")
+                            .successHandler(loginRedirectSuccessHandler)
+                            // .defaultSuccessUrl("/", false)
                             .permitAll()
                     )
                     .logout(logoutConfig -> logoutConfig

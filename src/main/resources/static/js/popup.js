@@ -90,7 +90,17 @@ class Popup {
             title: 'Congratulations!',
             content: `<p>You've successfully completed the game!</p>
                       <p>Thanks to you, the spaceship Sojourner can continue its mission. </p>`,
-            cta: 'Close'
+            cta: 'Back to menu'
+        }],
+        ['game finished debug', {
+            title: 'Journey\'s End... For Now',
+            content: `<p>This planet's civilization is beyond saving. Whatever crisis they faced, they brought it on
+                      themselves, and by the time you traced the fault, it was already too late.</p>
+                      <p>Earth still isn't safe. But the Sojourner presses on, carrying what you've learned to the
+                      next world, and the next, in search of an answer that actually works.</p>
+                      <p>One thing is clear: whatever solution Earth needs, it must be pursued more carefully than
+                      this civilization pursued theirs.</p>`,
+            cta: 'Back to menu'
         }],
         ['reset cut', {
             title: 'Reset the class under test',
@@ -101,6 +111,141 @@ class Popup {
             title: 'Hold on',
             content: `<p>{for}&hellip;</p><p>Please wait while the server is processing your request.</p>`,
             cta: 'Close'
+        }],
+    ]);
+
+    /**
+     * Per-room intro popups for the debugging strand. Each value is a single
+     * PopupText (one step) or an array of PopupText (multistep) — author per room.
+     * @type {Map<number, PopupText|array<PopupText>>}
+     */
+    static #debugRoomIntros = new Map([
+        [1, [
+            {
+                title: 'Debugging the Artifact Analyzer',
+                content: `<p>The <strong>ArtifactAnalyzer</strong> has a bug in it.</p>
+                          <p>You'll have to <strong>debug</strong> it: narrow the problem down step by
+                          step, the same way you traced the blocked pipes back in the temple. Changing code on
+                          a blind guess rarely ends well - observe first, then fix what the evidence points to.</p>`,
+                cta: 'Next',
+            },
+            {
+                title: 'The Left Editor',
+                content: `<p>The editor on the left holds the <strong>class under test (CUT)</strong> -
+                          the ArtifactAnalyzer's code, bug included. This is where your fix goes.</p>
+                          <p>You can edit it, but the class has to <strong>stay intact</strong>: it must remain a
+                          complete, working component. Deleting or gutting code to dodge the bug won't get you
+                          through - hidden tests check that the analyzer still does its job.</p>`,
+                cta: 'Next',
+            },
+            {
+                title: 'The Right Editor',
+                content: `<p>The editor on the right is a <strong>runner</strong> - your scratch pad. What it
+                          contains is entirely up to you, as long as it has no programming errors: on Run or
+                          Debug it is compiled and executed top to bottom.</p>
+                          <p>This first runner already calls the analyzer's six steps one by one, with a comment
+                          under each stating what it <em>should</em> return. Four of them share a single
+                          variable that gets overwritten every time, so the debugger only ever shows you its latest
+                          value - to catch an earlier one, stop execution on that exact line before the next step
+                          overwrites it.</p>
+                          <p>You don't have to check all six steps one by one: splitting the chain into halves
+                          with breakpoints is a good starting point. The comments are your map for this first
+                          machine - the later ones hand you less and less, until you decide for yourself what
+                          to observe.</p>`,
+                cta: 'Next',
+            },
+            {
+                title: 'Breakpoints',
+                content: `<p>Click onto a line number to set a <strong>breakpoint</strong>. Hit
+                          <strong>Debug</strong> instead of Run, and execution will pause there so you can
+                          inspect variables and step through the code line by line. You can set multiple of these
+                          and continue to the next one.</p>
+                          <p>Keep in mind: a breakpoint only pauses the program when the running code actually
+                          <em>reaches</em> its line. On a line the run never executes, it never fires.</p>
+                          <p>Narrow it down, fix the bug in the CUT, then hit <strong>Run</strong> to
+                          confirm the checks pass.</p>`,
+                cta: `Let's start!`,
+            },
+        ]],
+        [2, {
+            title: 'Debugging the Vent Control',
+            content: `<p>The <strong>VentControl</strong> cycles the growth bay's vent: open for the day, sealed
+                      for the night while the power - and with it the air scrubber - is down. Its self-test just
+                      failed: at the end of the cycle the vent is still open, and the power flag reads true again
+                      on its own.</p>
+                      <p>The runner still reads the bay's state after every step, so the observing is done for you -
+                      but it keeps only the latest reading, not the whole day: the two variables get overwritten
+                      every time. Working out what those states are <em>supposed</em> to be at each point is not
+                      done for you: the runner leaves you the lines to fill in. Step through with <strong>Debug</strong>
+                      and track both values as the cycle runs, the way you tracked state in the temple. Find the
+                      first step where one of them turns into something it shouldn't, fix it, then hit <strong>Run</strong>
+                      to confirm the fix against the
+                      hidden tests.</p>`,
+            cta: 'Start Debugging',
+        }],
+        [3, {
+            title: 'Debugging the Plant Containment',
+            content: `<p>The <strong>PlantContainment</strong> mixes the recovered agent into a dose and feeds it
+                      to the sprout in the growth bay. The sample doesn't react at all: the dose comes out
+                      inert.</p>
+                      <p>This bay logs nothing, and the runner only shows you the failure. Which steps you look at,
+                      and where you set your breakpoints, is up to you now. Follow the
+                      dose back through the steps that built it, the way you followed each ingredient back to its
+                      source in the temple, then hit <strong>Run</strong> to confirm the fix against the hidden
+                      tests.</p>`,
+            cta: 'Start Debugging',
+        }],
+        [4, {
+            title: 'Debugging the Teleport Beacon',
+            content: `<p>The <strong>TeleportBeacon</strong> should open the departure window and lift the crew
+                      off the planet, but the window stays shut, so the ship can't leave.</p>
+                      <p>Nothing is prepared this time: the runner hands you the failure and nothing else. You decide
+                      what the beacon should be doing, where you suspect it isn't, and how you check. Test your hunch
+                      against the evidence, the way the hypothesis machine had you do in the temple.</p>
+                      <p>One more thing: a symptom can have more than one cause, so the window may stay shut even
+                      after a fix that was correct - if you only tweak things until the output looks right, other values might still fail. Keep going until the hidden tests pass on <strong>Run</strong>.</p>`,
+            cta: 'Start Debugging',
+        }],
+    ]);
+
+    /** @type {PopupText} Fallback when a room has no dedicated intro. */
+    static #debugRoomIntroDefault = {
+        title: 'Start Debugging',
+        content: `<p>The component on the left contains a bug. Find it and fix it.</p>`,
+        cta: 'Start Debugging',
+    };
+
+    /**
+     * Per-component "you fixed it" popups for the debugging strand, keyed by the
+     * component name the server reports in the ComponentFixedEvent. Keyed by component
+     * rather than room because the progression may already have advanced when the
+     * event arrives. Falls back to the generic 'component fixed' text.
+     * @type {Map<string, PopupText|array<PopupText>>}
+     */
+    static #debugComponentFixed = new Map([
+        ['ArtifactAnalyzer', {
+            title: 'The reading holds up',
+            content: `<p>The bug is fixed. The analyzer reports the artifact's exposure the way the sensor
+                      actually measured it.</p>`,
+            cta: 'Continue',
+        }],
+        ['VentControl', {
+            title: 'The bay makes it through the night',
+            content: `<p>The bug is fixed. The vent seals for the night and the power stays down, so the sprout
+                      from the temple keeps the air it needs until morning.</p>`,
+            cta: 'Continue',
+        }],
+        ['PlantContainment', {
+            title: 'The sample responds',
+            content: `<p>The bug is fixed. The dose comes out active, and the sample finally reacts to the agent
+                      recovered from the temple.</p>`,
+            cta: 'Continue',
+        }],
+        ['TeleportBeacon', {
+            title: 'The departure window opens',
+            content: `<p>The bug is fixed. The link holds, and the beacon opens the window that lifts the crew off
+                      the planet.</p>`,
+            cta: 'Continue',
         }],
     ]);
 
@@ -147,10 +292,38 @@ class Popup {
         }
         return this;
     }
+    
+    openDebugRoomIntro(room) {
+        const text = Popup.#debugRoomIntros.get(room) ?? Popup.#debugRoomIntroDefault;
+        if (Array.isArray(text)) {
+            this.#multistep = { key: room, index: 0, source: Popup.#debugRoomIntros };
+            this.#renderMultiStep();
+        } else {
+            this.#multistep = false;
+            this.#render(text);
+        }
+        return this;
+    }
+
+    openDebugComponentFixed(componentName) {
+        const text = Popup.#debugComponentFixed.get(componentName);
+        if (text === undefined) {
+            return this.open('component fixed');
+        }
+        if (Array.isArray(text)) {
+            this.#multistep = { key: componentName, index: 0, source: Popup.#debugComponentFixed };
+            this.#renderMultiStep();
+        } else {
+            this.#multistep = false;
+            this.#render(text);
+        }
+        return this;
+    }
 
     #renderMultiStep() {
         if (this.#multistep === false) return;
-        const text = Popup.#text.get(this.#multistep.key)[this.#multistep.index];
+        const source = this.#multistep.source ?? Popup.#text;
+        const text = source.get(this.#multistep.key)[this.#multistep.index];
         this.#render(text);
     }
 
@@ -172,7 +345,8 @@ class Popup {
         if (this.#multistep === false) {
             this.#close();
         } else {
-            const steps = Popup.#text.get(this.#multistep.key).length;
+            const source = this.#multistep.source ?? Popup.#text;
+            const steps = source.get(this.#multistep.key).length;
             this.#multistep.index++;
             if (this.#multistep.index < steps) {
                 this.element.setAttribute('aria-hidden', 'true'); // animate out

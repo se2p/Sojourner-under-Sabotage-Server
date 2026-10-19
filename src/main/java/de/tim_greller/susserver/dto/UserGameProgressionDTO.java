@@ -11,4 +11,5 @@ public class UserGameProgressionDTO {
     private String componentName;
     private int stage;
     private GameProgressStatus status;
+    private GameMode mode;
 }
