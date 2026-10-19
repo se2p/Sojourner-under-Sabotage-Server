@@ -66,8 +66,27 @@ document.getElementById('logout-button').addEventListener('click', ev => {
 });
 
 const uiOverlay = document.getElementById('ui-overlay');
-
 const result = document.getElementById('execution-result');
+const bottomPanel = document.getElementById('bottom-panel');
+
+/*
+ * Automatically adjust the code editors height to fill the remaining space above the bottom panel.
+ * This can happen on
+ * 1) results appearing,
+ * 2) log messsages details open/close,
+ * 3) switching tabs,
+ * 4) stepping through with the debugger,
+ * 5) resizing the window.
+ */
+let bottomPanelHeight = bottomPanel.offsetHeight;
+const bottomPanelResizeObserver = new ResizeObserver(() => {
+    console.log(`bottom panel resized: ${bottomPanel.offsetHeight}px`);
+    if (bottomPanel.offsetHeight !== bottomPanelHeight) {
+        doEditorLayout();
+        bottomPanelHeight = bottomPanel.offsetHeight;
+    }
+});
+bottomPanelResizeObserver.observe(bottomPanel);
 
 function doEditorLayout() {
     const editorContainers = document.querySelectorAll('.monaco-editor-container');
@@ -84,13 +103,10 @@ function doEditorLayout() {
 function renderResult(content) {
     result.innerHTML = content;
     if (content) {
-        document.getElementById('bottom-panel').setAttribute('aria-hidden', 'false');
+        bottomPanel.setAttribute('aria-hidden', 'false');
         switchTab('results');
         if (_lastCoverage) _applyCoverageDecorations();
-        setTimeout(() => result.scrollIntoView({behavior: 'smooth', block: 'nearest'}), 50);
     }
-
-    doEditorLayout();
 }
 
 function sessionExpired(statusInfo) {
@@ -480,7 +496,7 @@ function renderDebugTrace(debugTrace) {
     // Like IntelliJ: jump straight to the first breakpoint, or to the end if none is set.
     _debugStepIndex = _firstBreakpointIndex();
 
-    document.getElementById('bottom-panel').setAttribute('aria-hidden', 'false');
+    bottomPanel.setAttribute('aria-hidden', 'false');
     switchTab('debugger');
     _renderCurrentStep();
 }
@@ -702,7 +718,6 @@ function switchTab(name) {
     });
     _debugRevealCoverage = name === 'debugger';
     _applyCoverageDecorations();
-    doEditorLayout();
 }
 
 
