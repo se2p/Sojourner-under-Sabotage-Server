@@ -22,6 +22,24 @@ main.screen {
     right: 2rem;
     z-index: 2;
 }
+.home-corner {
+    position: absolute;
+    top: 1.5rem;
+    left: 2rem;
+    z-index: 2;
+}
+.home-corner a {
+    color: #eee;
+    text-decoration: none;
+    transition: color .3s;
+}
+.home-corner a:hover,
+.home-corner a:focus-visible {
+    color: #fff;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+    text-decoration-thickness: 3px;
+}
 
 .teaser, .research, .intro {
     max-width: 50rem;
@@ -82,25 +100,16 @@ h1 {
     box-shadow: 0 0 50px 0 #fff5;
 }
 
-.teaser .btn-small {
-    margin-top: 2rem;
-    font-size: 1rem;
-    color: #ccc;
-    text-underline-offset: 2px;
-    transition: color .3s, text-underline-offset .3s, transform .3s;
-}
-.teaser .btn-small:hover,
-.teaser .btn-small:focus {
-    text-underline-offset: 5px;
-    color: #fff;
-    transform: translateY(-2px);
-}
-
 .intro {
     display: flex;
     flex-direction: column;
 }
-.intro .card:hover {
+.intro.centered {
+    text-align: center;
+    line-height: 1.5;
+    gap: 1rem;
+}
+.card:hover {
     box-shadow: 0 0 40px 0 rgba(255,255,255,.08);
 }
 .intro .card .part {

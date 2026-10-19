@@ -60,6 +60,20 @@ html, body {
 .button svg.hidden {
     display: none;
 }
+.ghost.button {
+    background: transparent;
+    border: 2px solid var(--clr-bg);
+}
+.ghost.button:hover,
+.ghost.button:focus-visible {
+    background: var(--clr-bg);
+    color: #fff;
+}
+.button-bar.flex {
+    display: flex;
+    flex-flow: row wrap;
+    gap: .5rem;
+}
 
 span.orange {
     color: #ff9c28;

@@ -21,11 +21,27 @@ public class GameController {
     private final SurveyService surveyService;
     private final ComponentRepository componentRepository;
 
-    @GetMapping({"/", "/home"})
-    public String home(Model model) {
+    private void hasSaveFileAttributes(Model model) {
         model.addAttribute("hasTestingSave", gameProgressionService.hasSavedProgression(GameMode.Testing));
         model.addAttribute("hasDebuggingSave", gameProgressionService.hasSavedProgression(GameMode.Debugging));
+    }
+
+    @GetMapping({"/", "/home"})
+    public String home(Model model) {
+        hasSaveFileAttributes(model);
         return "home";
+    }
+
+    @GetMapping("/part-1-debugging")
+    public String part1Debugging(Model model) {
+        hasSaveFileAttributes(model);
+        return "part-1-debugging";
+    }
+
+    @GetMapping("/part-2-testing-and-debugging")
+    public String part2TestingAndDebugging(Model model) {
+        hasSaveFileAttributes(model);
+        return "part-2-testing-and-debugging";
     }
 
     @GetMapping("/reset")

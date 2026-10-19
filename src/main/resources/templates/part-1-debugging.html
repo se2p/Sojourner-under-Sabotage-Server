@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" xmlns:th="https://www.thymeleaf.org"
+      xmlns:sec="http://www.thymeleaf.org/extras/spring-security" lang="en">
+<head>
+    <title>Sojourner under Sabotage Part I ─ Learn Debugging with visual puzzles and Java code</title>
+    <meta name="description" content="Sojourner under Sabotage is a serious game that lets you practice software testing and debugging.">
+
+    <link rel="stylesheet" type="text/css" th:href="@{/css/base.css}" />
+    <link rel="stylesheet" type="text/css" th:href="@{/css/pages.css}" />
+
+    <link rel="apple-touch-icon" sizes="180x180" th:href="@{/images/favicon/apple-touch-icon.png}">
+    <link rel="icon" type="image/png" sizes="32x32" th:href="@{/images/favicon/favicon-32x32.png}">
+    <link rel="icon" type="image/png" sizes="16x16" th:href="@{/images/favicon/favicon-16x16.png}">
+    <link rel="manifest" th:href="@{/images/favicon/site.webmanifest}">
+    <link rel="mask-icon" th:href="@{/images/favicon/safari-pinned-tab.svg}" color="#5bbad5">
+    <link rel="shortcut icon" th:href="@{/images/favicon/favicon.ico}">
+    <meta name="msapplication-TileColor" content="#da532c">
+    <meta name="msapplication-config" th:content="@{/images/favicon/browserconfig.xml}">
+    <meta name="theme-color" content="#000000">
+</head>
+<body>
+<nav class="home-corner">
+    <a th:href="@{/}">&lt; Home</a>
+</nav>
+<nav class="auth-corner">
+    <a sec:authorize="isAuthenticated()" th:href="@{/logout}" class="button">Log out</a>
+    <a sec:authorize="isAnonymous()" th:href="@{/login(redirect='/part-1-debugging')}" class="button">Log in</a>
+</nav>
+<main>
+    <div class="teaser">
+        <div th:if="${param.logout}" class="logout">
+            You have been logged out.
+        </div>
+        <h1>Sojourner under Sabotage<br><span class="orange">Part I ─ Debugging</span></h1>
+        <p>Learn debugging with visual puzzles and Java code.</p>
+        <img th:src="@{/images/sus-teaser.png}" alt="Sojourner under Sabotage" draggable="false" />
+        <div class="button-bar flex">
+            <a sec:authorize="isAnonymous()" th:href="@{/login(redirect='/part-1-debugging')}" class="button">Log in to play</a>
+            <a th:if="${hasDebuggingSave}" th:href="@{/game(mode='Debugging')}" class="button">Continue</a>
+            <a sec:authorize="isAuthenticated()" th:href="@{/reset-debug}" class="ghost button">New game</a>
+        </div>
+    </div>
+    <div class="intro centered">
+        <div class="text">
+            <h2><span class="orange">Explore the cryptic secrets of a mysterious planet.</span></h2>
+            <p>
+                Aboard the Sojourner, humanity’s last hope drifts silently between the stars,
+                sleeping unconsciously in cryogenic pods, unknowing where their journey will take them.
+            </p>
+            <p>
+                Then the ship’s systems detect a mysterious planet:
+                Earlier calculations determined it as inhabitable, yet its surface is covered in structures.
+                Whoever built them has vanished without a trace, except for a few sealed temples,
+                containing worn down machinery.
+            </p>
+            <p>
+                You were tasked to explore the planet, to recover any technology that might help humanity survive,
+                and to investigate the history of the planet.<br>
+                A service robot accompanies you to the surface, aiding you with analyzing the planet and its ancient machinery.
+                You can also use tools aboard the Sojourner for your research;
+                though they are worn down by the long journey and may need some maintenance.
+                By observing carefully, forming hypotheses and narrowing down the fault,
+                you debug each system and, piece by piece, uncover what happened on this planet.
+            </p>
+        </div>
+    </div>
+</main>
+<footer id="legal-and-credits">
+    <h2 id="legal">Legal</h2>
+    <p>
+        <a rel="noopener" target="_blank" href="https://www.uni-passau.de/en/privacy-statement">Privacy policy (EN)</a><br>
+        <a rel="noopener" target="_blank" href="https://www.uni-passau.de/datenschutzerklaerung">Datenschutzerklärung (DE)</a>
+    </p>
+    <p>
+        <a rel="noopener" target="_blank" href="https://www.uni-passau.de/en/legal-notices/">Legal Notice (EN)</a><br>
+        <a rel="noopener" target="_blank" href="https://www.uni-passau.de/impressum">Impressum (DE)</a>
+    </p>
+    <p>
+        Sojourner under Sabotage is a project of the <a rel="noopener" target="_blank" href="https://www.fim.uni-passau.de/lehrstuhl-fuer-software-engineering-ii/">Chair of Software Engineering II</a> at the University of Passau.
+    </p>
+    <p><a th:href="@{/#credits}">Credits</a></p>
+</footer>
+</body>
+</html>

@@ -19,8 +19,9 @@
     <meta name="theme-color" content="#000000">
 </head>
 <body>
-<nav class="auth-corner" sec:authorize="isAuthenticated()">
-    <a th:href="@{/logout}" class="button">Log out</a>
+<nav class="auth-corner">
+    <a sec:authorize="isAuthenticated()" th:href="@{/logout}" class="button">Log out</a>
+    <a sec:authorize="isAnonymous()" th:href="@{/login}" class="button">Log in</a>
 </nav>
 <main>
     <div class="teaser">
@@ -55,9 +56,14 @@
                     you debug each system and, piece by piece, uncover what happened on this planet.
                 </p>
             </div>
-            <a sec:authorize="isAnonymous()" th:href="@{/login}" class="button">Log in to play</a>
-            <a th:if="${hasDebuggingSave}" th:href="@{/game(mode='Debugging')}" class="button">Continue</a>
-            <a sec:authorize="isAuthenticated()" th:href="@{/reset-debug}" class="button">New game</a>
+            <div class="button-bar flex">
+                <a sec:authorize="isAnonymous()" th:href="@{/login}" class="button">Log in to play</a>
+
+                <a th:if="${hasDebuggingSave}" th:href="@{/game(mode='Debugging')}" class="button">Continue</a>
+                <a sec:authorize="isAuthenticated()" th:href="@{/reset-debug}" class="ghost button">New game</a>
+
+                <a th:href="@{/part-1-debugging}" class="ghost button">Learn more</a>
+            </div>
         </div>
         <div class="card">
             <span class="part">Part II - Testing &amp; Debugging</span>
@@ -86,9 +92,14 @@
                     And to the realization that not all allies can be trusted.
                 </p-->
             </div>
-            <a sec:authorize="isAnonymous()" th:href="@{/login}" class="button">Log in to play</a>
-            <a th:if="${hasTestingSave}" th:href="@{/game}" class="button">Continue</a>
-            <a sec:authorize="isAuthenticated()" th:href="@{/reset}" class="button">New game</a>
+            <div class="button-bar flex">
+                <a sec:authorize="isAnonymous()" th:href="@{/login}" class="button">Log in to play</a>
+
+                <a th:if="${hasTestingSave}" th:href="@{/game}" class="button">Continue</a>
+                <a sec:authorize="isAuthenticated()" th:href="@{/reset}" class="ghost button">New game</a>
+
+                <a th:href="@{/part-2-testing-and-debugging}" class="ghost button">Learn more</a>
+            </div>
         </div>
     </div>
     <div class="research">
